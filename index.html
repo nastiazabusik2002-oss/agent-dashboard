@@ -911,15 +911,33 @@ async function loadDataFromGitHub() {
 }
 
 // ═══════════════════════════════════════════
-//  FETCH CSV FROM GOOGLE SHEETS
+//  FETCH CSV FROM GOOGLE SHEETS (multi-proxy fallback)
 // ═══════════════════════════════════════════
+const PROXIES = [
+  { url: 'https://api.allorigins.win/get?url=', json: true },
+  { url: 'https://corsproxy.io/?',              json: false },
+  { url: 'https://api.codetabs.com/v1/proxy?quest=', json: false },
+];
+
 async function fetchCSV(gid) {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
-  const resp = await fetch(PROXY + encodeURIComponent(url));
-  if (!resp.ok) throw new Error(`Помилка мережі: ${resp.status}`);
-  const json = await resp.json();
-  if (!json.contents) throw new Error('Порожня відповідь від проксі');
-  return json.contents;
+  const target = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+  let lastErr = 'Всі проксі недоступні';
+  for (const proxy of PROXIES) {
+    try {
+      const resp = await fetch(proxy.url + encodeURIComponent(target), { signal: AbortSignal.timeout(10000) });
+      if (!resp.ok) { lastErr = `HTTP ${resp.status} від ${proxy.url}`; continue; }
+      if (proxy.json) {
+        const data = await resp.json();
+        if (data.contents && data.contents.length > 50) return data.contents;
+        lastErr = 'Порожня відповідь від проксі'; continue;
+      } else {
+        const text = await resp.text();
+        if (text && text.length > 50) return text;
+        lastErr = 'Порожня відповідь від проксі'; continue;
+      }
+    } catch(e) { lastErr = e.message || String(e); }
+  }
+  throw new Error(`Google Sheets недоступний: ${lastErr}`);
 }
 
 // ═══════════════════════════════════════════
@@ -936,47 +954,57 @@ async function refreshData() {
   const icon = document.getElementById('refreshIcon');
   btn.disabled = true;
   icon.className = 'spin'; icon.textContent = '⟳';
-  setStatus('loading', '⟳ Крок 1/3 — Завантаження з Google Sheets...');
+
+  let sheetsUpdated = false;
+  let sheetsWarning = '';
 
   try {
-    // STEP 1: Fetch Google Sheets
-    const [janCSV, febCSV] = await Promise.all([fetchCSV(GID_JAN), fetchCSV(GID_FEB)]);
-
-    setStatus('loading', '⟳ Крок 2/3 — Парсинг даних...');
-
-    const newJan = extractAgents(janCSV);
-    const newFeb = extractAgents(febCSV);
-    if (newJan.length >= 5) JAN = newJan;
-    if (newFeb.length >= 5) {
-      const janSet = new Set(JAN.map(a => a.name.toLowerCase().replace(/\s/g,'').slice(0,8)));
-      FEB = newFeb.map(a => ({ ...a, isNew: !janSet.has(a.name.toLowerCase().replace(/\s/g,'').slice(0,8)) }));
+    // STEP 1: Try to fetch from Google Sheets (non-blocking — failure is OK)
+    setStatus('loading', '⟳ Крок 1/3 — Завантаження з Google Sheets...');
+    try {
+      const [janCSV, febCSV] = await Promise.all([fetchCSV(GID_JAN), fetchCSV(GID_FEB)]);
+      const newJan = extractAgents(janCSV);
+      const newFeb = extractAgents(febCSV);
+      if (newJan.length >= 5) JAN = newJan;
+      if (newFeb.length >= 5) {
+        const janSet = new Set(JAN.map(a => a.name.toLowerCase().replace(/\s/g,'').slice(0,8)));
+        FEB = newFeb.map(a => ({ ...a, isNew: !janSet.has(a.name.toLowerCase().replace(/\s/g,'').slice(0,8)) }));
+      }
+      sheetsUpdated = true;
+    } catch(sheetsErr) {
+      sheetsWarning = sheetsErr.message;
+      setStatus('loading', `⚠ Google Sheets недоступний — пушу поточні дані на GitHub...`);
     }
     buildComp();
 
-    // STEP 2: Push to GitHub
-    setStatus('loading', '⟳ Крок 3/3 — Публікація на GitHub...');
+    // STEP 2: Push to GitHub (always — even if Sheets failed, push current data)
+    setStatus('loading', '⟳ Крок 2/3 — Публікація на GitHub...');
     await pushDataToGitHub(JAN, FEB);
 
     // STEP 3: Render
     renderAll();
     const now = new Date();
+    const sheetsNote = sheetsUpdated ? '' : ' · ⚠ Google Sheets недоступний (таблиця не оновлена)';
     document.getElementById('updateTs').textContent =
-      `✓ Оновлено та опубліковано: ${now.toLocaleString('uk-UA')}`;
+      `✓ Опубліковано: ${now.toLocaleString('uk-UA')}${sheetsNote}`;
 
-    // STEP 4: Telegram notifications (admin summary + personalized per-agent)
+    // STEP 4: Telegram notifications
     const hasTg = getTgToken() && getTgChat();
     try {
-      await sendTelegramNotification(COMP);   // admin team-wide summary
-      await sendPersonalizedAlerts();          // individual per-agent messages
-      setStatus('success', `✓ Готово! Дані оновлено і запушено на GitHub${hasTg ? ' · Сповіщення надіслано в Telegram 🤖' : ''}`);
+      await sendTelegramNotification(COMP);
+      await sendPersonalizedAlerts();
+      const tgNote = hasTg ? ' · Telegram 🤖' : '';
+      setStatus('success', sheetsUpdated
+        ? `✓ Готово! Дані з таблиці оновлено і запушено на GitHub${tgNote}`
+        : `✓ GitHub оновлено (поточні дані)${tgNote} · ⚠ Google Sheets не відповів`
+      );
     } catch(tgErr) {
-      setStatus('success', `✓ Дані оновлено · Telegram помилка: ${tgErr.message}`);
+      setStatus('success', `✓ GitHub оновлено · Telegram помилка: ${tgErr.message}`);
     }
-    setTimeout(hideStatus, 5000);
+    setTimeout(hideStatus, 6000);
 
   } catch(e) {
     setStatus('error', `✗ ${e.message}`);
-    // Still try to render with whatever data we have
     buildComp(); renderAll();
   } finally {
     btn.disabled = false;
