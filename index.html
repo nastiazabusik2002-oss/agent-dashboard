@@ -50,6 +50,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .tok-status{margin-top:10px;font-size:11px;padding:7px 10px;border-radius:6px;display:none}
 .tok-status.ok{background:var(--green-s);color:var(--green);display:block}
 .tok-status.err{background:var(--red-s);color:var(--red);display:block}
+
+/* TELEGRAM BUTTON */
+.btn-tg{display:flex;align-items:center;gap:5px;background:#0f2a1a;border:1px solid #22c55e44;color:var(--muted);padding:8px 12px;border-radius:8px;font-size:11px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-tg:hover{border-color:var(--green);color:var(--green)}
+.btn-tg.active{border-color:var(--green);color:var(--green);background:#14432a}
 .spin{display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .update-ts{font-size:10px;color:var(--muted2);text-align:right;margin-top:2px}
@@ -164,6 +169,9 @@ tr:last-child td{border-bottom:none}
     <div class="badge b-feb">FEB 2026 · ~75% місяця</div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
       <div style="display:flex;gap:8px">
+        <button class="btn-tg" id="btnTg" onclick="openTgModal()" title="Telegram сповіщення">
+          <span>🤖</span> <span id="tgLabel">Telegram</span>
+        </button>
         <button class="btn-token" id="btnToken" onclick="openTokenModal()" title="Налаштування GitHub токена">
           <span id="tokenIcon">🔑</span> <span id="tokenLabel">Токен</span>
         </button>
@@ -283,6 +291,28 @@ tr:last-child td{border-bottom:none}
 </div>
 
 <div class="footer" id="footer">Dashboard · GPT Support Team · Jan vs Feb 2026</div>
+
+<!-- TELEGRAM MODAL -->
+<div class="tok-overlay" id="tgModal">
+  <div class="tok-modal">
+    <div class="tok-title">🤖 Telegram сповіщення</div>
+    <div class="tok-desc">
+      Після кожного оновлення бот надішле звіт про агентів що просіли.<br>
+      Поріг сповіщення: падіння <b>&gt;10%</b> avg/зміна вважається проблемою.
+    </div>
+    <div style="margin-bottom:8px;font-size:11px;color:var(--muted)">Bot Token</div>
+    <input class="tok-input" id="tgBotToken" type="password" placeholder="1234567890:ABCdef...">
+    <div style="margin:10px 0 8px;font-size:11px;color:var(--muted)">Chat ID</div>
+    <input class="tok-input" id="tgChatId" type="text" placeholder="489251506" style="font-family:monospace">
+    <div class="tok-btns">
+      <button class="tok-save" onclick="saveTgSettings()">✓ Зберегти</button>
+      <button class="tok-save" style="background:#0d7a3e" onclick="testTelegram()">📨 Тест</button>
+      <button class="tok-clear" onclick="clearTgSettings()">✕ Видалити</button>
+      <button class="tok-cancel" onclick="closeTgModal()">Закрити</button>
+    </div>
+    <div class="tok-status" id="tgStatus"></div>
+  </div>
+</div>
 
 <!-- TOKEN MODAL -->
 <div class="tok-overlay" id="tokenModal">
@@ -424,6 +454,130 @@ function extractAgents(csvText) {
     }
   }
   return agents;
+}
+
+// ═══════════════════════════════════════════
+//  TELEGRAM
+// ═══════════════════════════════════════════
+const TG_TOKEN_KEY  = 'tg_bot_token';
+const TG_CHAT_KEY   = 'tg_chat_id';
+const DECLINE_THRESHOLD = -10; // % падіння що вважається проблемою
+
+function getTgToken()  { return localStorage.getItem(TG_TOKEN_KEY); }
+function getTgChat()   { return localStorage.getItem(TG_CHAT_KEY);  }
+
+function openTgModal() {
+  document.getElementById('tgBotToken').value = getTgToken() ? '••••••••••••••••' : '';
+  document.getElementById('tgChatId').value   = getTgChat() || '';
+  document.getElementById('tgStatus').className = 'tok-status';
+  document.getElementById('tgModal').classList.add('open');
+}
+function closeTgModal() { document.getElementById('tgModal').classList.remove('open'); }
+
+function saveTgSettings() {
+  const token  = document.getElementById('tgBotToken').value.trim();
+  const chatId = document.getElementById('tgChatId').value.trim();
+  if (chatId) localStorage.setItem(TG_CHAT_KEY, chatId);
+  if (token && !token.startsWith('•')) localStorage.setItem(TG_TOKEN_KEY, token);
+  updateTgBtn(!!(getTgToken() && getTgChat()));
+  showTgStatus('✓ Збережено', 'ok');
+  setTimeout(closeTgModal, 1000);
+}
+function clearTgSettings() {
+  localStorage.removeItem(TG_TOKEN_KEY);
+  localStorage.removeItem(TG_CHAT_KEY);
+  document.getElementById('tgBotToken').value = '';
+  document.getElementById('tgChatId').value   = '';
+  updateTgBtn(false);
+  showTgStatus('Налаштування видалено', 'ok');
+}
+function updateTgBtn(active) {
+  const btn = document.getElementById('btnTg');
+  const lbl = document.getElementById('tgLabel');
+  if (active) { btn.classList.add('active'); lbl.textContent = 'Telegram ✓'; }
+  else        { btn.classList.remove('active'); lbl.textContent = 'Telegram'; }
+}
+function showTgStatus(msg, type) {
+  const el = document.getElementById('tgStatus');
+  el.textContent = msg; el.className = `tok-status ${type}`;
+}
+
+async function testTelegram() {
+  const token  = document.getElementById('tgBotToken').value.trim().startsWith('•')
+                   ? getTgToken()
+                   : document.getElementById('tgBotToken').value.trim();
+  const chatId = document.getElementById('tgChatId').value.trim() || getTgChat();
+  if (!token || !chatId) { showTgStatus('Заповни обидва поля', 'err'); return; }
+  showTgStatus('Надсилаю...', 'ok');
+  try {
+    await tgSend(token, chatId, '✅ Agent Dashboard — тест пройшов! Сповіщення працюють.');
+    showTgStatus('✓ Повідомлення надіслано! Перевір Telegram.', 'ok');
+  } catch(e) {
+    showTgStatus(`✗ Помилка: ${e.message}`, 'err');
+  }
+}
+
+async function tgSend(token, chatId, text) {
+  const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.description || 'Telegram API error');
+  return data;
+}
+
+async function sendTelegramNotification(comp) {
+  const token  = getTgToken();
+  const chatId = getTgChat();
+  if (!token || !chatId) return; // Telegram не налаштований — пропускаємо
+
+  const declining = comp
+    .filter(c => c.dPct !== null && c.dPct < DECLINE_THRESHOLD)
+    .sort((a, b) => a.dPct - b.dPct);
+
+  const rising = comp
+    .filter(c => c.dPct !== null && c.dPct >= 0)
+    .sort((a, b) => b.dPct - a.dPct);
+
+  const stable = comp
+    .filter(c => c.dPct !== null && c.dPct >= DECLINE_THRESHOLD && c.dPct < 0);
+
+  const now = new Date().toLocaleString('uk-UA');
+  let msg = `<b>📊 Agent Dashboard — Оновлення</b>\n<i>${now}</i>\n\n`;
+
+  if (declining.length > 0) {
+    msg += `<b>⚠️ Падіння ефективності (Jan→Feb):</b>\n`;
+    declining.forEach(c => {
+      const icon = c.dPct <= -20 ? '🔴' : '🟡';
+      const feb  = c.feb?.avg != null ? c.feb.avg.toFixed(1) : 'н/д';
+      msg += `${icon} <b>${c.jan.name}</b>\n`;
+      msg += `   ${c.jan.avg.toFixed(1)} → ${feb} avg/зміна (<b>${c.dPct.toFixed(1)}%</b>)\n`;
+    });
+    msg += '\n';
+  }
+
+  if (rising.length > 0) {
+    msg += `<b>✅ Зростання:</b>\n`;
+    rising.forEach(c => {
+      const feb = c.feb?.avg != null ? c.feb.avg.toFixed(1) : 'н/д';
+      msg += `🟢 <b>${c.jan.name}</b>  ${c.jan.avg.toFixed(1)} → ${feb} (+${c.dPct.toFixed(1)}%)\n`;
+    });
+    msg += '\n';
+  }
+
+  if (stable.length > 0) {
+    msg += `<b>➡️ Стабільно (незначне падіння):</b>\n`;
+    stable.forEach(c => {
+      const feb = c.feb?.avg != null ? c.feb.avg.toFixed(1) : 'н/д';
+      msg += `⚪ ${c.jan.name}  ${c.jan.avg.toFixed(1)} → ${feb} (${c.dPct.toFixed(1)}%)\n`;
+    });
+  }
+
+  msg += `\n<i>Team avg: Jan ${((comp.reduce((s,c)=>s+c.jan.avg,0))/comp.length).toFixed(1)} → Feb ${(comp.filter(c=>c.feb?.avg).reduce((s,c)=>s+c.feb.avg,0)/comp.filter(c=>c.feb?.avg).length).toFixed(1)}</i>`;
+
+  await tgSend(token, chatId, msg);
 }
 
 // ═══════════════════════════════════════════
@@ -574,7 +728,15 @@ async function refreshData() {
     const now = new Date();
     document.getElementById('updateTs').textContent =
       `✓ Оновлено та опубліковано: ${now.toLocaleString('uk-UA')}`;
-    setStatus('success', `✓ Готово! Дані оновлено і запушено на GitHub · Jan: ${JAN.length} · Feb: ${FEB.length} агентів`);
+
+    // STEP 4: Telegram notification
+    try {
+      await sendTelegramNotification(COMP);
+      const hasTg = getTgToken() && getTgChat();
+      setStatus('success', `✓ Готово! Дані оновлено і запушено на GitHub${hasTg ? ' · Сповіщення надіслано в Telegram 🤖' : ''}`);
+    } catch(tgErr) {
+      setStatus('success', `✓ Дані оновлено · Telegram помилка: ${tgErr.message}`);
+    }
     setTimeout(hideStatus, 5000);
 
   } catch(e) {
@@ -929,8 +1091,9 @@ function renderAll() {
 //  INIT
 // ═══════════════════════════════════════════
 (async () => {
-  // Check stored token
+  // Check stored tokens
   updateTokenBtn(!!getToken());
+  updateTgBtn(!!(getTgToken() && getTgChat()));
 
   // Try to load latest data from GitHub
   document.getElementById('updateTs').textContent = '⟳ Завантаження даних...';
