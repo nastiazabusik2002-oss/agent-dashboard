@@ -294,21 +294,6 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
-<!-- INSIGHTS -->
-<div class="row r1">
-  <div class="sec">
-    <div class="ttl"><span class="bar3" style="background:var(--teal)"></span>Ключові інсайти · Jan → Feb</div>
-    <div class="il" id="insights"></div>
-  </div>
-</div>
-
-<!-- EXEC -->
-<div class="row r1">
-  <div class="sec">
-    <div class="ttl"><span class="bar3" style="background:var(--purple)"></span>Executive Summary · 10 управлінських висновків</div>
-    <div class="eg" id="exec"></div>
-  </div>
-</div>
 
 <div class="footer" id="footer">Dashboard · GPT Support Team · Jan vs Feb 2026</div>
 
@@ -1469,8 +1454,6 @@ function renderAll() {
   renderNew();
   renderChatWinners();
   renderWinnersLosers();
-  renderInsights();
-  renderExec();
   document.getElementById('footer').textContent =
     `Dashboard · GPT Support Team · Jan (${JAN.length} агентів) vs Feb (${FEB.length} агентів) 2026`;
 }
