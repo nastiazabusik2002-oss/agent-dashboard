@@ -214,6 +214,9 @@ tr:last-child td{border-bottom:none}
 <!-- KPI -->
 <div class="kpi-row" id="kpiRow"></div>
 
+<!-- DIAGNOSIS BANNER -->
+<div id="diagnosisRow" style="padding:0 24px;margin-top:8px"></div>
+
 <!-- CHARTS ROW 1 -->
 <div class="row r21">
   <div class="sec">
@@ -583,6 +586,24 @@ async function sendTelegramNotification(comp) {
   const now = new Date().toLocaleString('uk-UA');
   let msg = `<b>📊 Agent Dashboard — Оновлення</b>\n<i>${now}</i>\n\n`;
 
+  // Prepend diagnosis context
+  const diag = computeDiagnosis();
+  if (diag) {
+    if (diag.type === 'systemic') {
+      msg += `<b>${diag.icon} Контекст: ймовірно загальний трафік знизився</b>\n`
+           + `<i>${diag.declining.length} з ${diag.comp.length} агентів у мінусі з похожими значеннями (σ=${diag.stdDev.toFixed(1)}%) — це не індивідуальна проблема</i>\n\n`;
+    } else if (diag.type === 'mixed-systemic') {
+      msg += `<b>${diag.icon} Контекст: переважно системне, але є відхилення</b>\n`
+           + `<i>Більшість впала через трафік, але ${diag.outliers.map(c=>c.jan.name.split(' ')[0]).join(', ')} — значно нижче середнього</i>\n\n`;
+    } else if (diag.type === 'individual') {
+      msg += `<b>${diag.icon} Контекст: індивідуальна проблема</b>\n`
+           + `<i>Більшість команди стабільна — падіння у конкретних людей, не трафік</i>\n\n`;
+    } else {
+      msg += `<b>${diag.icon} Контекст: змішана картина</b>\n`
+           + `<i>σ=${diag.stdDev.toFixed(1)}% — важко визначити системне чи індивідуальне</i>\n\n`;
+    }
+  }
+
   if (declining.length > 0) {
     msg += `<b>⚠️ Падіння ефективності (Jan→Feb):</b>\n`;
     declining.forEach(c => {
@@ -785,16 +806,34 @@ async function sendPersonalizedAlerts() {
     const janShifts = jan.shifts ?? '\u2014';
     const febShifts = feb?.shifts ?? '\u2014';
 
+    // Build status line with diagnosis context
+    const diag = DIAGNOSIS || computeDiagnosis();
     let statusLine = '';
     if (comp.dPct !== null) {
-      if (comp.dPct >= 0)
-        statusLine = `\n\u2705 <b>Ти на правильному шляху!</b> Ефективність зросла на <b>+${comp.dPct.toFixed(1)}%</b>`;
-      else if (comp.dPct >= DECLINE_THRESHOLD)
+      if (comp.dPct >= 0) {
+        const extraContext = diag && diag.type !== 'individual' && diag.declining.length >= diag.comp.length * 0.65
+          ? ` (а більшість команди впала \u2014 ти серед кращих \uD83D\uDCAA)`  : '';
+        statusLine = `\n\u2705 <b>Ти на правильному шляху!</b> Ефективність зросла на <b>+${comp.dPct.toFixed(1)}%</b>${extraContext}`;
+      } else if (comp.dPct >= DECLINE_THRESHOLD) {
         statusLine = `\n\u27A1\uFE0F Незначне зниження (${comp.dPct.toFixed(1)}%) \u2014 в межах норми`;
-      else if (comp.dPct >= -20)
+      } else if (comp.dPct >= -20) {
         statusLine = `\n\u26A0\uFE0F Зниження ефективності на <b>${comp.dPct.toFixed(1)}%</b>. Зверни увагу!`;
-      else
+      } else {
         statusLine = `\n\uD83D\uDD34 Значне зниження на <b>${comp.dPct.toFixed(1)}%</b>. Потрібна увага!`;
+      }
+    }
+
+    // Add team context line
+    let contextLine = '';
+    if (diag && comp.dPct !== null && comp.dPct < 0) {
+      const isOutlier = diag.outliers.some(o => o.jan.name === jan.name);
+      if (diag.type === 'systemic' && !isOutlier) {
+        contextLine = `\n\n\uD83C\uDF10 <i>Для контексту: ${diag.declining.length} з ${diag.comp.length} агентів команди теж у мінусі \u2014 схоже на загальне падіння трафіку, не лише у тебе.</i>`;
+      } else if ((diag.type === 'systemic' || diag.type === 'mixed-systemic') && isOutlier) {
+        contextLine = `\n\n\uD83C\uDF10 <i>Для контексту: більшість команди теж впала (ймовірно трафік), але твій показник значно нижчий за середнє по команді (${diag.mean.toFixed(1)}%) \u2014 варто розібратись.</i>`;
+      } else if (diag.type === 'individual') {
+        contextLine = `\n\n\uD83D\uDC64 <i>Для контексту: більшість команди стабільна або в плюсі \u2014 це не загальний трафік.</i>`;
+      }
     }
 
     const dAvgStr   = comp.dAvg  != null ? ` (${comp.dAvg > 0 ? '+' : ''}${comp.dAvg.toFixed(1)})` : '';
@@ -804,7 +843,7 @@ async function sendPersonalizedAlerts() {
       `<b>Avg / зміна:</b>  Jan: <b>${janAvg}</b>  \u2192  Feb: <b>${febAvg}</b>${dAvgStr}\n` +
       `<b>Чат / зміна:</b>  Jan: ${janChats}  \u2192  Feb: ${febChats}${dChatsStr}\n` +
       `<b>Відпрацьовано:</b>  Jan: ${janShifts} зм  \u2192  Feb: ${febShifts} зм` +
-      statusLine;
+      statusLine + contextLine;
 
     try {
       await tgSend(token, chatId, msg);
@@ -1037,6 +1076,91 @@ function buildComp() {
     const proj = (f && f.shifts) ? Math.round(f.total/f.shifts*20) : null;
     return { jan:j, feb:f, dAvg, dPct, dChats, proj };
   });
+}
+
+// ═══════════════════════════════════════════
+//  DIAGNOSIS: SYSTEMIC vs INDIVIDUAL
+// ═══════════════════════════════════════════
+function computeDiagnosis() {
+  const comp = COMP.filter(c => c.dPct !== null);
+  if (comp.length < 3) return null;
+
+  const declining = comp.filter(c => c.dPct < 0);
+  const rising    = comp.filter(c => c.dPct >= 0);
+  const declineRatio = declining.length / comp.length;
+
+  const mean    = comp.reduce((s, c) => s + c.dPct, 0) / comp.length;
+  const stdDev  = Math.sqrt(comp.reduce((s, c) => s + Math.pow(c.dPct - mean, 2), 0) / comp.length);
+
+  // Agents significantly below the team mean (outliers even within a systemic drop)
+  const outlierThreshold = mean - stdDev;
+  const outliers = comp
+    .filter(c => c.dPct < outlierThreshold)
+    .sort((a, b) => a.dPct - b.dPct);
+
+  let type, icon, label, color, bg, border, detail;
+
+  if (declineRatio >= 0.65 && stdDev < 15) {
+    type   = 'systemic';
+    icon   = '🌐';
+    label  = 'Системне падіння — ймовірно трафік';
+    color  = 'var(--yellow)'; bg = '#1a1505'; border = '#78350f';
+    detail = `${declining.length} з ${comp.length} агентів у мінусі з похожими значеннями (σ=${stdDev.toFixed(1)}%). `
+           + `Висока ймовірність що знизився загальний трафік або навантаження, а не індивідуальна продуктивність.`;
+  } else if (declineRatio >= 0.65) {
+    type   = 'mixed-systemic';
+    icon   = '🌐';
+    label  = 'Переважно системне, але є значні відхилення';
+    color  = 'var(--yellow)'; bg = '#1a1505'; border = '#78350f';
+    detail = `${declining.length} з ${comp.length} агентів впали, але з великим розкидом (σ=${stdDev.toFixed(1)}%). `
+           + `Загальний фон системний (трафік?), проте окремі агенти відхиляються суттєво більше — варто перевірити їх окремо.`;
+  } else if (declineRatio <= 0.3) {
+    type   = 'individual';
+    icon   = '👤';
+    label  = 'Індивідуальна проблема';
+    color  = 'var(--red)'; bg = '#1a0505'; border = '#7f1d1d';
+    detail = `Лише ${declining.length} з ${comp.length} агентів у мінусі. Більшість команди стабільна або росте — `
+           + `це не падіння трафіку. Причина скоріш за все індивідуальна.`;
+  } else {
+    type   = 'mixed';
+    icon   = '⚠️';
+    label  = 'Змішана картина — потрібен додатковий аналіз';
+    color  = 'var(--feb)'; bg = '#1a1005'; border = '#7c2d12';
+    detail = `${declining.length} з ${comp.length} агентів впали (σ=${stdDev.toFixed(1)}%). `
+           + `Не можна однозначно визначити причину — рекомендується перевірити загальний обсяг вхідних звернень.`;
+  }
+
+  return { type, icon, label, color, bg, border, detail, declineRatio, mean, stdDev, declining, rising, outliers, comp };
+}
+
+let DIAGNOSIS = null;
+
+function renderDiagnosis() {
+  DIAGNOSIS = computeDiagnosis();
+  const el = document.getElementById('diagnosisRow');
+  if (!DIAGNOSIS) { el.innerHTML = ''; return; }
+  const d = DIAGNOSIS;
+
+  let outlierHtml = '';
+  if (d.outliers.length > 0 && d.type !== 'individual') {
+    const names = d.outliers.map(c => `<b>${c.jan.name.split(' ')[0]}</b> (${c.dPct.toFixed(1)}%)`).join(', ');
+    outlierHtml = `<div style="margin-top:5px;font-size:11px;color:var(--red)">⚠ Значно нижче середнього по команді (${d.mean.toFixed(1)}%): ${names}</div>`;
+  }
+
+  el.innerHTML = `
+    <div style="background:${d.bg};border:1px solid ${d.border};border-radius:8px;padding:11px 16px;display:flex;gap:12px;align-items:flex-start">
+      <div style="font-size:20px;flex-shrink:0;line-height:1.4">${d.icon}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px;color:${d.color};margin-bottom:3px">${d.label}</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">${d.detail}</div>
+        ${outlierHtml}
+      </div>
+      <div style="flex-shrink:0;text-align:right;font-size:11px;color:var(--muted2);white-space:nowrap">
+        <div>↓ ${d.declining.length} агентів</div>
+        <div>↑ ${d.rising.length} агентів</div>
+        <div style="margin-top:3px">σ = ${d.stdDev.toFixed(1)}%</div>
+      </div>
+    </div>`;
 }
 
 // ═══════════════════════════════════════════
@@ -1335,6 +1459,7 @@ function renderExec() {
 //  MASTER RENDER
 // ═══════════════════════════════════════════
 function renderAll() {
+  renderDiagnosis();
   renderKPI();
   createCmpChart();
   createVolChart();
