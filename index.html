@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Dashboard — Live · Jan vs Feb 2026</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#0d1117; --card:#161b27; --card2:#1e2535; --border:#2a3347;
+  --jan:#3b82f6; --feb:#f97316; --green:#22c55e; --green-s:#22c55e22;
+  --red:#ef4444; --red-s:#ef444422; --yellow:#f59e0b; --yellow-s:#f59e0b22;
+  --teal:#14b8a6; --purple:#a855f7; --text:#e2e8f0; --muted:#94a3b8; --muted2:#64748b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+
+/* HEADER */
+.hdr{background:linear-gradient(135deg,#1a2744,#0f1724);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.hdr h1{font-size:18px;font-weight:700;color:#fff}
+.hdr p{color:var(--muted);font-size:11px;margin-top:2px}
+.hdr-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.badge{padding:4px 12px;border-radius:14px;font-size:11px;font-weight:700;letter-spacing:.4px}
+.b-jan{background:#1e3a5f;color:#60a5fa;border:1px solid var(--jan)}
+.b-feb{background:#431407;color:#fb923c;border:1px solid var(--feb)}
+
+/* REFRESH BUTTON */
+.btn-refresh{display:flex;align-items:center;gap:7px;background:linear-gradient(135deg,#1d4ed8,#1e40af);border:1px solid #3b82f6;color:#fff;padding:8px 18px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-refresh:hover{background:linear-gradient(135deg,#2563eb,#1d4ed8);box-shadow:0 0 16px #3b82f644}
+.btn-refresh:disabled{opacity:.5;cursor:not-allowed}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.update-ts{font-size:10px;color:var(--muted2);text-align:right;margin-top:2px}
+
+/* STATUS BAR */
+.status-bar{padding:8px 24px;font-size:11px;display:none;align-items:center;gap:8px}
+.status-bar.show{display:flex}
+.status-bar.loading{background:#1e3a5f;color:#93c5fd;border-bottom:1px solid var(--jan)}
+.status-bar.success{background:#14432a;color:#34d399;border-bottom:1px solid var(--green)}
+.status-bar.error{background:#450a0a;color:#fca5a5;border-bottom:1px solid var(--red)}
+
+/* BANNER */
+.banner{background:#1a1505;border:1px solid #78350f;border-radius:8px;margin:12px 24px 0;padding:9px 14px;font-size:11px;color:#fbbf24;display:flex;align-items:center;gap:8px}
+
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:12px 24px 0}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 15px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kpi.c1::before{background:var(--jan)} .kpi.c2::before{background:var(--feb)}
+.kpi.c3::before{background:var(--green)} .kpi.c4::before{background:var(--red)}
+.kpi.c5::before{background:var(--yellow)} .kpi.c6::before{background:var(--teal)}
+.kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.kpi-cmp{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.kpi-v{font-size:20px;font-weight:800;line-height:1}
+.kpi-v.jan{color:var(--jan)} .kpi-v.feb{color:var(--feb)}
+.kpi-delta{font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px}
+.d-up{background:var(--green-s);color:var(--green)} .d-dn{background:var(--red-s);color:var(--red)} .d-neu{background:var(--yellow-s);color:var(--yellow)}
+.kpi-sub{font-size:10px;color:var(--muted2);margin-top:3px}
+
+/* LAYOUT */
+.row{display:grid;gap:12px;padding:12px 24px 0}
+.r2{grid-template-columns:1fr 1fr} .r21{grid-template-columns:2fr 1fr} .r12{grid-template-columns:1fr 2fr} .r1{grid-template-columns:1fr}
+.sec{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+.ttl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.bar3{width:3px;height:12px;border-radius:2px;display:inline-block;flex-shrink:0}
+.legend{display:flex;gap:14px;margin-bottom:10px}
+.leg{display:flex;align-items:center;gap:5px;font-size:11px}
+.ldot{width:9px;height:9px;border-radius:2px}
+
+/* TABLE */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead tr{background:var(--card2)}
+th{padding:7px 9px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:7px 9px;border-bottom:1px solid #1e2535;white-space:nowrap;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.tr-h:hover{background:rgba(59,130,246,.05)}
+.vj{color:var(--jan);font-weight:700} .vf{color:var(--feb);font-weight:700}
+.ag{color:var(--green)} .am{color:var(--yellow)} .al{color:var(--red)}
+.tag{display:inline-block;padding:2px 7px;border-radius:9px;font-size:10px;font-weight:600}
+.t-up{background:var(--green-s);color:var(--green)} .t-dn{background:var(--red-s);color:var(--red)}
+.t-neu{background:var(--yellow-s);color:var(--yellow)} .t-na{background:var(--card2);color:var(--muted2)}
+
+/* CHANGE LIST */
+.cr{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)}
+.cr:last-child{border:none}
+.cr-name{min-width:125px;font-size:12px}
+.cr-bwrap{flex:1;height:7px;background:var(--card2);border-radius:3px;position:relative;overflow:visible}
+.cr-bcenter{position:absolute;left:50%;top:0;height:7px;width:1px;background:var(--border)}
+.cr-bar{position:absolute;top:0;height:7px;border-radius:3px}
+.cr-val{min-width:44px;text-align:right;font-size:11px;font-weight:700}
+
+/* RANK CARDS */
+.rc{background:var(--card2);border-radius:8px;padding:11px 13px;margin-bottom:7px;border-left:3px solid}
+.rc:last-child{margin:0}
+.rc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.rc-name{font-weight:700;font-size:12px}
+.rc-chg{font-size:15px;font-weight:800}
+.rc-det{font-size:11px;color:var(--muted)}
+
+/* NEW AGENTS */
+.ng{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.nc{background:var(--card2);border-radius:8px;padding:12px;border-top:2px solid #34d399}
+.nc-name{font-weight:700;font-size:12px;margin-bottom:7px}
+.ns{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)}
+.ns:last-child{border:none}
+.ns-l{color:var(--muted)}
+.bbar{height:4px;border-radius:2px;background:var(--card);margin-top:7px;overflow:hidden}
+.bfill{height:100%;border-radius:2px}
+
+/* CHANNEL MIX */
+.mx-row{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.mx-lbl{min-width:46px;font-size:11px;color:var(--muted)}
+.mx-bars{flex:1;display:flex;height:16px;border-radius:4px;overflow:hidden}
+
+/* INSIGHTS */
+.il{display:grid;gap:6px}
+.ins{background:var(--card2);border-radius:7px;padding:9px 12px;border-left:3px solid var(--teal);font-size:12px;line-height:1.6}
+.ins.warn{border-color:var(--yellow)} .ins.alert{border-color:var(--red)} .ins.info{border-color:var(--purple)} .ins.ok{border-color:var(--green)}
+.in{font-weight:800;margin-right:4px;color:var(--teal)}
+.ins.ok .in{color:var(--green)} .ins.warn .in{color:var(--yellow)} .ins.alert .in{color:var(--red)} .ins.info .in{color:var(--purple)}
+
+/* EXEC */
+.eg{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.ei{background:var(--card2);border-radius:8px;padding:11px 13px;font-size:12px;line-height:1.6;display:flex;gap:9px}
+.en{font-size:17px;font-weight:900;color:var(--border);min-width:20px;flex-shrink:0}
+
+/* FOOTER */
+.footer{text-align:center;padding:12px;color:var(--muted2);font-size:10px;border-top:1px solid var(--border);margin-top:8px}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div>
+    <h1>Agent Performance Dashboard · Live</h1>
+    <p>GPT Support Team — January vs February 2026</p>
+  </div>
+  <div class="hdr-right">
+    <div class="badge b-jan">JAN 2026 · Повний місяць</div>
+    <div class="badge b-feb">FEB 2026 · ~75% місяця</div>
+    <div>
+      <button class="btn-refresh" id="btnRefresh" onclick="refreshData()">
+        <span id="refreshIcon">🔄</span> Оновити дані з Google Sheets
+      </button>
+      <div class="update-ts" id="updateTs">Останнє оновлення: початкові дані</div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="status-bar" id="statusBar">
+  <span id="statusIcon"></span><span id="statusMsg"></span>
+</div>
+
+<!-- BANNER -->
+<div class="banner">
+  ⚠️ <span><b>Feb 2026:</b> дані на 24.02 (~75% місяця) · Закриті тікети у Feb не відстежуються · Порівняння — за <b>avg/зміна</b></span>
+</div>
+
+<!-- KPI -->
+<div class="kpi-row" id="kpiRow"></div>
+
+<!-- CHARTS ROW 1 -->
+<div class="row r21">
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--jan)"></span>Avg / зміна — Jan vs Feb по агентах</div>
+    <div class="legend">
+      <div class="leg"><div class="ldot" style="background:var(--jan)"></div>January</div>
+      <div class="leg"><div class="ldot" style="background:var(--feb)"></div>February</div>
+      <div class="leg"><div class="ldot" style="background:#34d399"></div>Нові агенти (Feb)</div>
+    </div>
+    <div style="height:250px;position:relative"><canvas id="cmpChart"></canvas></div>
+  </div>
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--yellow)"></span>Зміна ефективності Jan→Feb</div>
+    <div id="changeList"></div>
+  </div>
+</div>
+
+<!-- CHARTS ROW 2 -->
+<div class="row r2">
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--teal)"></span>Обсяг контактів — Jan vs Feb</div>
+    <div class="legend">
+      <div class="leg"><div class="ldot" style="background:var(--jan)"></div>Jan</div>
+      <div class="leg"><div class="ldot" style="background:var(--feb)"></div>Feb (actual)</div>
+    </div>
+    <div style="height:210px;position:relative"><canvas id="volChart"></canvas></div>
+  </div>
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--teal)"></span>Розподіл каналів</div>
+    <div style="height:160px;position:relative"><canvas id="mixChart"></canvas></div>
+    <div id="mixDetails" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- TABLE -->
+<div class="row r1">
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--purple)"></span>Порівняльна таблиця агентів — Jan vs Feb</div>
+    <div class="tw"><table><thead>
+      <tr>
+        <th>Агент</th>
+        <th style="color:var(--jan)">Jan Зміни</th><th style="color:var(--feb)">Feb Зміни</th>
+        <th style="color:var(--jan)">Jan Total</th><th style="color:var(--feb)">Feb Total</th>
+        <th>Проекція</th>
+        <th style="color:var(--jan)">Jan Avg/зм</th><th style="color:var(--feb)">Feb Avg/зм</th>
+        <th>Δ Avg</th>
+        <th style="color:var(--jan)">Jan Чат/зм</th><th style="color:var(--feb)">Feb Чат/зм</th>
+        <th>Δ Чат</th><th>Статус</th>
+      </tr>
+    </thead><tbody id="cmpBody"></tbody></table></div>
+  </div>
+</div>
+
+<!-- NEW AGENTS + CHAT WINNERS -->
+<div class="row r21">
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:#34d399"></span>Нові агенти у Feb 2026</div>
+    <div class="ng" id="newAgents"></div>
+  </div>
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--yellow)"></span>Чат-ефективність: Jan→Feb</div>
+    <div id="chatWinners"></div>
+  </div>
+</div>
+
+<!-- WINNERS / LOSERS -->
+<div class="row r2">
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--green)"></span>Стабільні / зростаючі агенти</div>
+    <div id="winners"></div>
+  </div>
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--red)"></span>Найбільше падіння ефективності</div>
+    <div id="losers"></div>
+  </div>
+</div>
+
+<!-- INSIGHTS -->
+<div class="row r1">
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--teal)"></span>Ключові інсайти · Jan → Feb</div>
+    <div class="il" id="insights"></div>
+  </div>
+</div>
+
+<!-- EXEC -->
+<div class="row r1">
+  <div class="sec">
+    <div class="ttl"><span class="bar3" style="background:var(--purple)"></span>Executive Summary · 10 управлінських висновків</div>
+    <div class="eg" id="exec"></div>
+  </div>
+</div>
+
+<div class="footer" id="footer">Dashboard · GPT Support Team · Jan vs Feb 2026</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════
+const SHEET_ID = '157LfSlWBvqy2ZPe4L3VcTkXNAKMt9N7ktHigS0NPoAg';
+const GID_JAN  = '268313886';
+const GID_FEB  = '1857805644';
+const PROXY    = 'https://api.allorigins.win/get?url=';
+
+const ABBR = {
+  'Андріяна Носаль':'АН','Наталя Грицан':'НГ','Марічка Подвадцятник':'МП',
+  'Сабіна Сафіулова':'СС','Нікіта Крапівной':'НК','Катя Козицька':'КК',
+  'Христя Лещишин':'ХЛ','Наталя Чикулаєва':'НЧ','Наталя Телятинська':'НТ',
+  'Христя Малко':'ХМ','Софа Гронська':'СГ',
+  'Вова Вульчин':'ВВ','Настя Волосянко':'НВ','Маша Івасюк':'МІ',
+};
+
+// ═══════════════════════════════════════════
+//  INITIAL DATA (fallback)
+// ═══════════════════════════════════════════
+let JAN = [
+  {name:'Андріяна Носаль',  abbr:'АН',tickets:830, emails:1120,chats:278, chatShifts:4, avgChats:69.5,shifts:20,total:1398,avg:69.9},
+  {name:'Наталя Грицан',    abbr:'НГ',tickets:260, emails:369, chats:944, chatShifts:16,avgChats:59.0,shifts:19,total:1313,avg:69.1},
+  {name:'Марічка Подвадцятник',abbr:'МП',tickets:189,emails:257,chats:1023,chatShifts:17,avgChats:60.2,shifts:19,total:1280,avg:67.4},
+  {name:'Сабіна Сафіулова', abbr:'СС',tickets:412, emails:460, chats:1110,chatShifts:17,avgChats:65.3,shifts:20,total:1570,avg:78.5},
+  {name:'Нікіта Крапівной', abbr:'НК',tickets:183, emails:211, chats:1218,chatShifts:19,avgChats:64.1,shifts:20,total:1429,avg:71.5},
+  {name:'Катя Козицька',    abbr:'КК',tickets:184, emails:184, chats:1034,chatShifts:19,avgChats:54.4,shifts:20,total:1218,avg:60.9},
+  {name:'Христя Лещишин',  abbr:'ХЛ',tickets:106, emails:134, chats:509, chatShifts:12,avgChats:42.4,shifts:15,total:643, avg:42.9},
+  {name:'Наталя Чикулаєва',abbr:'НЧ',tickets:256, emails:404, chats:836, chatShifts:16,avgChats:52.3,shifts:19,total:1240,avg:65.3},
+  {name:'Наталя Телятинська',abbr:'НТ',tickets:152,emails:226, chats:1024,chatShifts:17,avgChats:60.2,shifts:19,total:1250,avg:65.8},
+  {name:'Христя Малко',    abbr:'ХМ',tickets:156, emails:218, chats:689, chatShifts:18,avgChats:38.3,shifts:20,total:907, avg:45.4},
+  {name:'Софа Гронська',   abbr:'СГ',tickets:1019,emails:1744,chats:108, chatShifts:2, avgChats:54.0,shifts:20,total:1852,avg:92.6},
+];
+
+let FEB = [
+  {name:'Андріяна Носаль',  abbr:'АН',tickets:0,emails:690,chats:107,chatShifts:null,avgChats:null,shifts:null,total:797,avg:null, isNew:false},
+  {name:'Софа Гронська',   abbr:'СГ',tickets:0,emails:568,chats:397,chatShifts:9,   avgChats:44.1,shifts:14,  total:965,avg:68.9,isNew:false},
+  {name:'Сабіна Сафіулова',abbr:'СС',tickets:0,emails:224,chats:308,chatShifts:4,   avgChats:77.0,shifts:7,   total:532,avg:76.0,isNew:false},
+  {name:'Катя Козицька',   abbr:'КК',tickets:0,emails:151,chats:534,chatShifts:10,  avgChats:53.4,shifts:14,  total:685,avg:48.9,isNew:false},
+  {name:'Христя Лещишин', abbr:'ХЛ',tickets:0,emails:120,chats:454,chatShifts:9,   avgChats:50.4,shifts:13,  total:574,avg:44.2,isNew:false},
+  {name:'Наталя Чикулаєва',abbr:'НЧ',tickets:0,emails:166,chats:517,chatShifts:10, avgChats:51.7,shifts:14,  total:683,avg:48.8,isNew:false},
+  {name:'Христя Малко',   abbr:'ХМ',tickets:0,emails:120,chats:452,chatShifts:10,  avgChats:45.2,shifts:13,  total:572,avg:44.0,isNew:false},
+  {name:'Наталя Грицан',  abbr:'НГ',tickets:0,emails:236,chats:536,chatShifts:12,  avgChats:44.7,shifts:14,  total:772,avg:55.1,isNew:false},
+  {name:'Марічка Підвадцятник',abbr:'МП',tickets:0,emails:216,chats:440,chatShifts:9,avgChats:48.9,shifts:14,total:656,avg:46.9,isNew:false},
+  {name:'Наталя Телятинська',abbr:'НТ',tickets:0,emails:188,chats:613,chatShifts:12,avgChats:51.1,shifts:15, total:801,avg:53.4,isNew:false},
+  {name:'Нікіта Крапівной',abbr:'НК',tickets:0,emails:136,chats:550,chatShifts:11, avgChats:50.0,shifts:11,  total:686,avg:62.4,isNew:false},
+  {name:'Вова Вульчин',   abbr:'ВВ',tickets:0,emails:202,chats:359,chatShifts:10,  avgChats:35.9,shifts:14,  total:561,avg:40.1,isNew:true},
+  {name:'Настя Волосянко', abbr:'НВ',tickets:0,emails:116,chats:178,chatShifts:8,   avgChats:22.3,shifts:11,  total:294,avg:26.7,isNew:true},
+  {name:'Маша Івасюк',    abbr:'МІ',tickets:0,emails:72, chats:200,chatShifts:6,   avgChats:33.3,shifts:10,  total:272,avg:27.2,isNew:true},
+];
+
+let COMP = [];
+const CHARTS = {};
+
+// ═══════════════════════════════════════════
+//  CSV PARSER
+// ═══════════════════════════════════════════
+function parseCSVLine(line) {
+  const cols = []; let q = false; let cur = '';
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { q = !q; }
+    else if (c === ',' && !q) { cols.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  cols.push(cur.trim());
+  return cols;
+}
+
+function pNum(s) {
+  if (!s || typeof s !== 'string') return null;
+  const t = s.trim();
+  if (!t || t.includes('DIV') || t.includes('N/A') || t === '#' || t === '-') return null;
+  const v = parseFloat(t.replace(',', '.').replace(/[^\d.\-]/g, ''));
+  return isNaN(v) ? null : v;
+}
+
+function cleanName(s) {
+  if (!s) return '';
+  // Remove emojis and common symbols
+  return s.replace(/[\u{1F300}-\u{1FFFF}\u{2600}-\u{27BF}\u{1F000}-\u{1FFFF}]/gu, '')
+          .replace(/🍋|✉️|🌸/g, '').trim();
+}
+
+function getAbbr(name) {
+  for (const [k, v] of Object.entries(ABBR)) {
+    const n = name.toLowerCase().replace(/\s+/g, '');
+    const k2 = k.toLowerCase().replace(/\s+/g, '');
+    if (n === k2 || n.startsWith(k2.slice(0, 7)) || k2.startsWith(n.slice(0, 7))) return v;
+  }
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts.slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
+}
+
+function extractAgents(csvText) {
+  const rows = csvText.split('\n').map(parseCSVLine);
+  const agents = [];
+  for (const cols of rows) {
+    const idx = (cols[1]||'').trim();
+    if (/^\d+$/.test(idx)) {
+      const name = cleanName(cols[2] || '');
+      if (!name) continue;
+      agents.push({
+        name,
+        abbr: getAbbr(name),
+        tickets: parseInt(cols[3])||0,
+        emails:  parseInt(cols[4])||0,
+        chats:   parseInt(cols[5])||0,
+        chatShifts: pNum(cols[6]),
+        avgChats:   pNum(cols[7]),
+        shifts:     pNum(cols[8]),
+        total:   parseInt(cols[9])||0,
+        avg:     pNum(cols[10]),
+      });
+    }
+  }
+  return agents;
+}
+
+// ═══════════════════════════════════════════
+//  FETCH DATA
+// ═══════════════════════════════════════════
+async function fetchCSV(gid) {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+  const resp = await fetch(PROXY + encodeURIComponent(url));
+  if (!resp.ok) throw new Error(`Помилка мережі: ${resp.status}`);
+  const json = await resp.json();
+  if (!json.contents) throw new Error('Порожня відповідь від проксі');
+  return json.contents;
+}
+
+async function refreshData() {
+  const btn = document.getElementById('btnRefresh');
+  const icon = document.getElementById('refreshIcon');
+  btn.disabled = true;
+  icon.className = 'spin'; icon.textContent = '⟳';
+  setStatus('loading', '⟳ Завантаження даних з Google Sheets...');
+
+  try {
+    const [janCSV, febCSV] = await Promise.all([
+      fetchCSV(GID_JAN),
+      fetchCSV(GID_FEB)
+    ]);
+
+    const newJan = extractAgents(janCSV);
+    const newFeb = extractAgents(febCSV);
+
+    if (newJan.length >= 5) {
+      JAN = newJan;
+    }
+    if (newFeb.length >= 5) {
+      const janNameSet = new Set(JAN.map(a => a.name.toLowerCase().replace(/\s/g,'').slice(0,8)));
+      FEB = newFeb.map(a => ({
+        ...a,
+        isNew: !janNameSet.has(a.name.toLowerCase().replace(/\s/g,'').slice(0,8))
+      }));
+    }
+
+    buildComp();
+    renderAll();
+
+    const now = new Date();
+    document.getElementById('updateTs').textContent =
+      `Оновлено: ${now.toLocaleDateString('uk-UA')} о ${now.toLocaleTimeString('uk-UA')}`;
+    setStatus('success', `✓ Дані оновлено! Jan: ${JAN.length} агентів · Feb: ${FEB.length} агентів`);
+    setTimeout(() => hideStatus(), 4000);
+
+  } catch (e) {
+    setStatus('error', `✗ Помилка: ${e.message}. Показані останні завантажені дані.`);
+  } finally {
+    btn.disabled = false;
+    icon.className = ''; icon.textContent = '🔄';
+  }
+}
+
+function setStatus(type, msg) {
+  const bar = document.getElementById('statusBar');
+  bar.className = `status-bar show ${type}`;
+  document.getElementById('statusMsg').textContent = msg;
+  bar.style.display = 'flex';
+}
+function hideStatus() {
+  document.getElementById('statusBar').className = 'status-bar';
+}
+
+// ═══════════════════════════════════════════
+//  BUILD COMP
+// ═══════════════════════════════════════════
+function buildComp() {
+  COMP = JAN.map(j => {
+    const f = FEB.find(x => {
+      const jn = j.name.toLowerCase().replace(/\s/g,'').slice(0,8);
+      const fn = x.name.toLowerCase().replace(/\s/g,'').slice(0,8);
+      return jn === fn || jn.startsWith(fn.slice(0,6)) || fn.startsWith(jn.slice(0,6));
+    }) || null;
+    const dAvg = (f && f.avg !== null) ? +(f.avg - j.avg).toFixed(1) : null;
+    const dPct = (f && f.avg !== null) ? +((f.avg - j.avg)/j.avg*100).toFixed(1) : null;
+    const dChats = (f && f.avgChats !== null && j.avgChats !== null) ? +(f.avgChats - j.avgChats).toFixed(1) : null;
+    const proj = (f && f.shifts) ? Math.round(f.total/f.shifts*20) : null;
+    return { jan:j, feb:f, dAvg, dPct, dChats, proj };
+  });
+}
+
+// ═══════════════════════════════════════════
+//  KPI ROW
+// ═══════════════════════════════════════════
+function renderKPI() {
+  const janTotal = JAN.reduce((s,a)=>s+a.total,0);
+  const febTotal = FEB.reduce((s,a)=>s+a.total,0);
+  const janAvg = +(JAN.reduce((s,a)=>s+(a.avg||0),0)/JAN.filter(a=>a.avg).length).toFixed(1);
+  const febComp = FEB.filter(a=>!a.isNew && a.avg!==null);
+  const febAvg = +(febComp.reduce((s,a)=>s+a.avg,0)/febComp.length).toFixed(1);
+  const avgDelta = +((febAvg-janAvg)/janAvg*100).toFixed(1);
+  const janLeader = [...JAN].sort((a,b)=>b.avg-a.avg)[0];
+  const febLeader = [...FEB.filter(a=>a.avg!==null)].sort((a,b)=>b.avg-a.avg)[0];
+  const risers = COMP.filter(c=>c.dPct!==null && c.dPct>=0).length;
+  const fallers = COMP.filter(c=>c.dPct!==null && c.dPct<0).length;
+
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi c1">
+      <div class="kpi-lbl">Агентів у команді</div>
+      <div class="kpi-cmp"><span class="kpi-v jan">${JAN.length}</span><span style="color:var(--muted)">→</span><span class="kpi-v feb">${FEB.length}</span><span class="kpi-delta d-up">+${FEB.length-JAN.length}</span></div>
+      <div class="kpi-sub">${FEB.filter(a=>a.isNew).length} нові агенти у Feb</div>
+    </div>
+    <div class="kpi c2">
+      <div class="kpi-lbl">Total контактів</div>
+      <div class="kpi-cmp"><span class="kpi-v jan">${janTotal.toLocaleString()}</span><span style="color:var(--muted)">→</span><span class="kpi-v feb">${febTotal.toLocaleString()}</span></div>
+      <div class="kpi-sub">Feb проекція ≈ ${Math.round(febTotal/0.75).toLocaleString()}</div>
+    </div>
+    <div class="kpi c3">
+      <div class="kpi-lbl">Team Avg/зміна</div>
+      <div class="kpi-cmp"><span class="kpi-v jan">${janAvg}</span><span style="color:var(--muted)">→</span><span class="kpi-v feb">${febAvg}</span><span class="kpi-delta ${avgDelta>=0?'d-up':'d-dn'}">${avgDelta>0?'+':''}${avgDelta}%</span></div>
+      <div class="kpi-sub">Comparable group (без нових)</div>
+    </div>
+    <div class="kpi c4">
+      <div class="kpi-lbl">Закриті тікети</div>
+      <div class="kpi-cmp"><span class="kpi-v jan">${JAN.reduce((s,a)=>s+a.tickets,0).toLocaleString()}</span><span style="color:var(--muted)">→</span><span class="kpi-v feb">0</span><span class="kpi-delta d-dn">⚠</span></div>
+      <div class="kpi-sub">Метрика зникла у Feb</div>
+    </div>
+    <div class="kpi c5">
+      <div class="kpi-lbl">Лідер місяця</div>
+      <div class="kpi-cmp" style="flex-direction:column;align-items:flex-start;gap:2px">
+        <div style="font-size:11px;color:var(--jan);font-weight:700">Jan: ${janLeader.name.split(' ')[0]} ${janLeader.avg}</div>
+        <div style="font-size:11px;color:var(--feb);font-weight:700">Feb: ${febLeader?.name.split(' ')[0]||'—'} ${febLeader?.avg||'—'}</div>
+      </div>
+      <div class="kpi-sub">Зміна лідера місяця</div>
+    </div>
+    <div class="kpi c6">
+      <div class="kpi-lbl">Ріст / Падіння</div>
+      <div class="kpi-cmp">
+        <span class="kpi-delta d-up" style="font-size:13px">↑ ${risers}</span>
+        <span style="color:var(--muted);margin:0 3px">|</span>
+        <span class="kpi-delta d-dn" style="font-size:13px">↓ ${fallers}</span>
+      </div>
+      <div class="kpi-sub">Із ${risers+fallers} порівнюваних агентів</div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════
+//  CHARTS
+// ═══════════════════════════════════════════
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = "'Segoe UI',system-ui,sans-serif";
+Chart.defaults.font.size = 11;
+
+function destroyChart(id) {
+  if (CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; }
+}
+
+function createCmpChart() {
+  destroyChart('cmp');
+  const order = [...COMP].sort((a,b)=>b.jan.avg-a.jan.avg);
+  const newFeb = FEB.filter(x=>x.isNew);
+  const labels = [...order.map(c=>c.jan.abbr), ...newFeb.map(x=>x.abbr+'🆕')];
+  const janD   = [...order.map(c=>c.jan.avg), ...newFeb.map(()=>null)];
+  const febD   = [...order.map(c=>c.feb?.avg??null), ...newFeb.map(x=>x.avg)];
+  const febBg  = labels.map((_,i)=> i>=order.length ? '#34d39988' : '#f9731699');
+  CHARTS.cmp = new Chart(document.getElementById('cmpChart'),{
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'January', data:janD, backgroundColor:'#3b82f699', borderRadius:3, borderSkipped:false},
+      {label:'February',data:febD, backgroundColor:febBg,       borderRadius:3, borderSkipped:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.raw===null?`${c.dataset.label}: н/д`:`${c.dataset.label}: ${c.raw.toFixed(1)}`}}},
+      scales:{x:{grid:{color:'#1e2535'},ticks:{font:{size:10}}},y:{grid:{color:'#1e2535'},min:0,max:100}}
+    }
+  });
+}
+
+function createVolChart() {
+  destroyChart('vol');
+  const order = [...COMP].sort((a,b)=>b.jan.total-a.jan.total);
+  CHARTS.vol = new Chart(document.getElementById('volChart'),{
+    type:'bar',
+    data:{ labels:order.map(c=>c.jan.abbr), datasets:[
+      {label:'Jan Email',data:order.map(c=>c.jan.emails),backgroundColor:'#3b82f6bb',borderRadius:2,stack:'jan'},
+      {label:'Jan Chat', data:order.map(c=>c.jan.chats), backgroundColor:'#14b8a6bb',borderRadius:2,stack:'jan'},
+      {label:'Feb Email',data:order.map(c=>c.feb?.emails||0),backgroundColor:'#f97316bb',borderRadius:2,stack:'feb'},
+      {label:'Feb Chat', data:order.map(c=>c.feb?.chats||0), backgroundColor:'#2dd4bf88',borderRadius:2,stack:'feb'},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{boxWidth:9,padding:10}},tooltip:{mode:'index',intersect:false}},
+      scales:{x:{stacked:true,grid:{color:'#1e2535'}},y:{stacked:true,grid:{color:'#1e2535'},ticks:{callback:v=>v.toLocaleString()}}}
+    }
+  });
+}
+
+function createMixChart() {
+  destroyChart('mix');
+  const janE = JAN.reduce((s,a)=>s+a.emails,0);
+  const janC = JAN.reduce((s,a)=>s+a.chats,0);
+  const febE = FEB.reduce((s,a)=>s+a.emails,0);
+  const febC = FEB.reduce((s,a)=>s+a.chats,0);
+  const janPct = Math.round(janE/(janE+janC)*100);
+  const febPct = Math.round(febE/(febE+febC)*100);
+  CHARTS.mix = new Chart(document.getElementById('mixChart'),{
+    type:'doughnut',
+    data:{
+      labels:['Jan Email','Jan Chat','Feb Email','Feb Chat'],
+      datasets:[
+        {data:[janE,janC,0,0],backgroundColor:['#3b82f6','#14b8a6','#f97316','#2dd4bf'],borderColor:'#161b27',borderWidth:3,cutout:'55%',radius:'50%'},
+        {data:[0,0,febE,febC],backgroundColor:['#3b82f6','#14b8a6','#f97316','#2dd4bf'],borderColor:'#161b27',borderWidth:3,cutout:'70%',radius:'95%'},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw.toLocaleString()}`}}}}
+  });
+  document.getElementById('mixDetails').innerHTML = `
+    <div style="font-size:11px;display:grid;gap:5px">
+      <div style="display:flex;justify-content:space-between"><span style="color:var(--jan)">Jan Email</span><b>${janE.toLocaleString()}</b><span style="color:var(--muted2)">${janPct}%</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:var(--teal)">Jan Chat</span><b>${janC.toLocaleString()}</b><span style="color:var(--muted2)">${100-janPct}%</span></div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px"><span style="color:var(--feb)">Feb Email</span><b>${febE.toLocaleString()}</b><span style="color:var(--muted2)">${febPct}%</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#2dd4bf">Feb Chat</span><b>${febC.toLocaleString()}</b><span style="color:var(--muted2)">${100-febPct}%</span></div>
+      <div style="margin-top:6px;padding:7px 9px;background:var(--card2);border-radius:6px">Chat частка: ${100-janPct}% → ${100-febPct}% <span class="kpi-delta ${(100-febPct)>(100-janPct)?'d-up':'d-dn'}" style="font-size:10px">${(100-febPct)-(100-janPct)>0?'+':''}${(100-febPct)-(100-janPct)} п.п.</span></div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════
+//  DOM RENDERS
+// ═══════════════════════════════════════════
+function renderChangeList() {
+  const sorted = COMP.filter(c=>c.dPct!==null).sort((a,b)=>b.dPct-a.dPct);
+  const el = document.getElementById('changeList'); el.innerHTML='';
+  sorted.forEach(c=>{
+    const col = c.dPct>=0?'#22c55e':c.dPct>=-10?'#f59e0b':'#ef4444';
+    const w = Math.min(Math.abs(c.dPct)*1.4, 48);
+    const left = c.dPct<0;
+    const d = document.createElement('div'); d.className='cr';
+    d.innerHTML=`<div class="cr-name">${c.jan.abbr}</div>
+      <div class="cr-bwrap"><div class="cr-bcenter"></div>
+        <div class="cr-bar" style="${left?`right:50%;width:${w}%`:`left:50%;width:${w}%`};background:${col};opacity:.8"></div>
+      </div>
+      <div class="cr-val" style="color:${col}">${c.dPct>0?'+':''}${c.dPct.toFixed(1)}%</div>`;
+    el.appendChild(d);
+  });
+}
+
+function acls(v){ return v==null?'':v>=70?'ag':v>=55?'am':'al'; }
+function statusTag(p){
+  if(p===null) return '<span class="tag t-na">Н/Д</span>';
+  if(p>=0)    return '<span class="tag t-up">↑ Ріст</span>';
+  if(p>=-10)  return '<span class="tag t-neu">→ Стабільно</span>';
+  if(p>=-20)  return '<span class="tag t-dn">↓ Помірне</span>';
+  return '<span class="tag t-dn">↓↓ Критично</span>';
+}
+
+function renderTable() {
+  const tbody = document.getElementById('cmpBody'); tbody.innerHTML='';
+  const sorted = [...COMP].sort((a,b)=>b.jan.avg-a.jan.avg);
+  sorted.forEach(c=>{
+    const f=c.feb;
+    const dA = c.dAvg!==null?`<span style="color:${c.dAvg>=0?'#22c55e':'#ef4444'};font-weight:700">${c.dAvg>0?'+':''}${c.dAvg.toFixed(1)}</span>`:'<span style="color:var(--muted2)">—</span>';
+    const dC = c.dChats!==null?`<span style="color:${c.dChats>=0?'#22c55e':'#ef4444'};font-weight:700">${c.dChats>0?'+':''}${c.dChats.toFixed(1)}</span>`:'<span style="color:var(--muted2)">—</span>';
+    const fShifts = f?(f.shifts!==null?`<span style="color:var(--feb)">${f.shifts}</span>`:'<span style="color:#ef4444">Н/Д⚠</span>'):'—';
+    const fAvg = f?(f.avg!==null?`<span class="${acls(f.avg)} vf">${f.avg.toFixed(1)}</span>`:'<span style="color:#ef4444">Н/Д</span>'):'—';
+    const tr = document.createElement('tr'); tr.className='tr-h';
+    tr.innerHTML=`<td style="font-weight:600">${c.jan.name}</td>
+      <td style="text-align:center;color:var(--muted)">${c.jan.shifts}</td>
+      <td style="text-align:center">${fShifts}</td>
+      <td style="text-align:right" class="vj">${c.jan.total.toLocaleString()}</td>
+      <td style="text-align:right;color:var(--feb)">${f?f.total.toLocaleString():'—'}</td>
+      <td style="text-align:right;color:var(--muted)">${c.proj?c.proj.toLocaleString():'—'}</td>
+      <td style="text-align:right" class="${acls(c.jan.avg)} vj">${c.jan.avg.toFixed(1)}</td>
+      <td style="text-align:right">${fAvg}</td>
+      <td style="text-align:right">${dA}</td>
+      <td style="text-align:right;color:var(--muted)">${c.jan.avgChats?.toFixed(1)||'—'}</td>
+      <td style="text-align:right;color:var(--feb)">${f?.avgChats?.toFixed(1)||'—'}</td>
+      <td style="text-align:right">${dC}</td>
+      <td>${statusTag(c.dPct)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderNew() {
+  const newA = FEB.filter(x=>x.isNew);
+  const el = document.getElementById('newAgents'); el.innerHTML='';
+  if (!newA.length) { el.innerHTML='<p style="color:var(--muted2);font-size:12px">Нових агентів немає</p>'; return; }
+  const norm = 66.3;
+  newA.forEach(a=>{
+    const pct = Math.round((a.avg/norm)*100);
+    const col = pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444';
+    const d = document.createElement('div'); d.className='nc';
+    d.innerHTML=`<div class="nc-name">${a.name}</div>
+      <div class="ns"><span class="ns-l">Зміни</span><span>${a.shifts}</span></div>
+      <div class="ns"><span class="ns-l">Total</span><span>${a.total}</span></div>
+      <div class="ns"><span class="ns-l">Avg/зм</span><span style="color:${col};font-weight:700">${a.avg||'—'}</span></div>
+      <div class="ns"><span class="ns-l">Чат/зм</span><span>${a.avgChats||'—'}</span></div>
+      <div style="margin-top:7px;font-size:10px;color:var(--muted)">% від норми (${norm})</div>
+      <div class="bbar"><div class="bfill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div>
+      <div style="font-size:11px;font-weight:700;color:${col};margin-top:3px">${pct}%</div>`;
+    el.appendChild(d);
+  });
+}
+
+function renderChatWinners() {
+  const sorted = COMP.filter(c=>c.dChats!==null).sort((a,b)=>b.dChats-a.dChats);
+  const el = document.getElementById('chatWinners'); el.innerHTML='';
+  sorted.forEach(c=>{
+    const col = c.dChats>=0?'#22c55e':c.dChats>=-5?'#f59e0b':'#ef4444';
+    const d = document.createElement('div'); d.className='cr';
+    d.innerHTML=`<div class="cr-name" style="font-size:11px">${c.jan.name.split(' ').slice(0,2).join(' ')}</div>
+      <div style="display:flex;align-items:center;gap:5px;flex:1;font-size:11px">
+        <span style="color:var(--jan)">${c.jan.avgChats?.toFixed(1)}</span>
+        <span style="color:var(--muted)">→</span>
+        <span style="color:var(--feb)">${c.feb?.avgChats?.toFixed(1)}</span>
+      </div>
+      <div class="cr-val" style="color:${col}">${c.dChats>0?'+':''}${c.dChats.toFixed(1)}</div>`;
+    el.appendChild(d);
+  });
+}
+
+function renderWinnersLosers() {
+  const wd = COMP.filter(c=>c.dPct!==null).sort((a,b)=>b.dPct-a.dPct);
+  const wEl=document.getElementById('winners'); wEl.innerHTML='';
+  const lEl=document.getElementById('losers'); lEl.innerHTML='';
+  const topN = Math.min(3, wd.length);
+  wd.slice(0,topN).forEach(c=>{
+    const col=c.dPct>=0?'#22c55e':c.dPct>=-10?'#f59e0b':'#ef4444';
+    const d=document.createElement('div'); d.className='rc';
+    d.style.borderColor=col;
+    d.innerHTML=`<div class="rc-head"><div class="rc-name">${c.jan.name}</div><div class="rc-chg" style="color:${col}">${c.dPct>0?'+':''}${c.dPct.toFixed(1)}%</div></div>
+      <div class="rc-det">Jan: <b>${c.jan.avg.toFixed(1)}</b> → Feb: <b>${c.feb?.avg?.toFixed(1)||'н/д'}</b> avg/зміна</div>`;
+    wEl.appendChild(d);
+  });
+  [...wd].reverse().slice(0,topN).forEach(c=>{
+    const d=document.createElement('div'); d.className='rc';
+    d.style.borderColor='#ef4444';
+    d.innerHTML=`<div class="rc-head"><div class="rc-name">${c.jan.name}</div><div class="rc-chg" style="color:#ef4444">${c.dPct.toFixed(1)}%</div></div>
+      <div class="rc-det">Jan: <b>${c.jan.avg.toFixed(1)}</b> → Feb: <b>${c.feb?.avg?.toFixed(1)||'н/д'}</b> · -${Math.abs(c.dAvg||0).toFixed(1)} пунктів</div>`;
+    lEl.appendChild(d);
+  });
+}
+
+function renderInsights() {
+  const items=[
+    {t:'alert',h:'Командна ефективність впала на ~17% (comparable group).','msg':'Jan: 66.3 avg/shift → Feb: ~54.9. 9 з 10 агентів знизили показник. Це системне явище — зміна навантаження, онбординг нових агентів або операційні зміни.'},
+    {t:'ok',   h:'Сабіна Сафіулова — найстабільніший performer.','msg':'Jan #2 (78.5) → Feb #1 (76.0), -3.2%. Чат-ефективність зросла: 65.3 → 77.0 (+17.9%). Лише 7 змін у Feb — при цьому продуктивність за зміну майже не змінилась.'},
+    {t:'ok',   h:'Христя Лещишин — єдиний агент з реальним зростанням (+3%).','msg':'42.9 → 44.2 avg/shift. Також +18.9% chat efficiency (42.4 → 50.4). Позитивна траєкторія для молодшого агента — варто відзначити.'},
+    {t:'alert',h:'Три топ-агенти впали >25%: Гронська (-25.6%), Чикулаєва (-25.3%), Подвадцятник (-30.4%).','msg':'Це не збіг — або зміна розподілу запитів, або мотиваційна проблема. Потрібна індивідуальна розмова з кожним.'},
+    {t:'warn', h:'Андріяна Носаль: відсутній облік змін у Feb.','msg':'797 контактів зроблено, але shifts = null → avg/shift неможливо розрахувати. Найбільш review-активний агент команди (13 Jan) фактично невидимий в Feb-статистиці.'},
+    {t:'warn', h:'Закриті тікети: 3 747 (Jan) → 0 (Feb).','msg':'Метрика повністю зникла. Або канал відключено, або система обліку змінилась. Якщо тікети реально обробляються — команда виконує приховану роботу.'},
+    {t:'info', h:'Нові агенти (26–40 avg/shift) знижують командний avg до ~49.4.','msg':'Настя (26.7) і Маша (27.2) — ~40% від норми. Нормально для онбордингу, але потрібен explicit onboarding-план з milestone-цілями.'},
+    {t:'info', h:'Chat-частка зростає: 62.2% → 63.8% (+1.6 п.п.)','msg':'Email-ядро лишається вразливим: 2 основні email-агенти (Носаль, Гронська). Ризик залежності — потрібен cross-train ще 2-3 агентів.'},
+  ];
+  const el=document.getElementById('insights'); el.innerHTML='';
+  items.forEach((ins,i)=>{
+    const d=document.createElement('div'); d.className=`ins ${ins.t}`;
+    d.innerHTML=`<span class="in">${String(i+1).padStart(2,'0')}.</span><b>${ins.h}</b> ${ins.msg}`;
+    el.appendChild(d);
+  });
+}
+
+function renderExec() {
+  const items=[
+    {n:'01',t:'Команда зросла з <b>11 до 14 агентів</b> (+27%), але ефективність впала на <b>~17%</b> avg/shift. Розширення не дало приросту продуктивності.'},
+    {n:'02',t:'<b>9 з 10 порівнюваних агентів</b> знизили avg/shift. Єдиний виняток — Лещишин (+3%). Це системна, не індивідуальна проблема.'},
+    {n:'03',t:'<b>Сабіна Сафіулова</b> — найстабільніший performer обох місяців: Jan #2 (78.5), Feb #1 (76.0). Зразок для команди.'},
+    {n:'04',t:'<b>Три топ-агенти впали на 25–30%:</b> Гронська, Чикулаєва, Подвадцятник. Потрібен 3-місячний тренд для управлінського висновку.'},
+    {n:'05',t:'<b>Андріяна Носаль: критична проблема обліку.</b> Shifts = null у Feb. Найактивніший review-агент (Jan: 13) неможливо оцінити. Терміново виправити.'},
+    {n:'06',t:'<b>Метрика "Закриті тікети" зникла</b> (3 747 → 0). Якщо канал активний — невидима робота. Якщо закрито — важливий channel shift без відображення.'},
+    {n:'07',t:'<b>Нові агенти Настя (26.7) та Маша (27.2)</b> — нижче 40% норми. Вова (40.1) — краще. Без прогресу за 4 тижні — переглянути програму адаптації.'},
+    {n:'08',t:'<b>Сабіна: лише 7 змін у Feb</b> (vs 20 у Jan). Аномалія: відпустка чи зміна умов? Незалежно від причини — ефективність збережена.'},
+    {n:'09',t:'<b>Chat-частка зростає: 62.2% → 63.8%.</b> Email-компетенція в 2 агентах — ризик залежності. Рекомендація: cross-train 2–3 агентів для email.'},
+    {n:'10',t:'<b>Пріоритети на March:</b> (1) виправити облік Носаль, (2) coaching для Гронської/Чикулаєвої/Подвадцятник, (3) onboarding goal-setting нових, (4) з\'ясувати долю тікетного каналу.'},
+  ];
+  const el=document.getElementById('exec'); el.innerHTML='';
+  items.forEach(e=>{
+    const d=document.createElement('div'); d.className='ei';
+    d.innerHTML=`<div class="en">${e.n}</div><div>${e.t}</div>`;
+    el.appendChild(d);
+  });
+}
+
+// ═══════════════════════════════════════════
+//  MASTER RENDER
+// ═══════════════════════════════════════════
+function renderAll() {
+  renderKPI();
+  createCmpChart();
+  createVolChart();
+  createMixChart();
+  renderChangeList();
+  renderTable();
+  renderNew();
+  renderChatWinners();
+  renderWinnersLosers();
+  renderInsights();
+  renderExec();
+  document.getElementById('footer').textContent =
+    `Dashboard · GPT Support Team · Jan (${JAN.length} агентів) vs Feb (${FEB.length} агентів) 2026`;
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+buildComp();
+renderAll();
+</script>
+</body>
+</html>
