@@ -1,0 +1,32 @@
+{
+  "lastUpdated": "2026-02-24T00:00:00.000Z",
+  "jan": [
+    {"name":"Андріяна Носаль",  "abbr":"АН","tickets":830, "emails":1120,"chats":278, "chatShifts":4, "avgChats":69.5,"shifts":20,"total":1398,"avg":69.9},
+    {"name":"Наталя Грицан",    "abbr":"НГ","tickets":260, "emails":369, "chats":944, "chatShifts":16,"avgChats":59.0,"shifts":19,"total":1313,"avg":69.1},
+    {"name":"Марічка Подвадцятник","abbr":"МП","tickets":189,"emails":257,"chats":1023,"chatShifts":17,"avgChats":60.2,"shifts":19,"total":1280,"avg":67.4},
+    {"name":"Сабіна Сафіулова", "abbr":"СС","tickets":412, "emails":460, "chats":1110,"chatShifts":17,"avgChats":65.3,"shifts":20,"total":1570,"avg":78.5},
+    {"name":"Нікіта Крапівной", "abbr":"НК","tickets":183, "emails":211, "chats":1218,"chatShifts":19,"avgChats":64.1,"shifts":20,"total":1429,"avg":71.5},
+    {"name":"Катя Козицька",    "abbr":"КК","tickets":184, "emails":184, "chats":1034,"chatShifts":19,"avgChats":54.4,"shifts":20,"total":1218,"avg":60.9},
+    {"name":"Христя Лещишин",  "abbr":"ХЛ","tickets":106, "emails":134, "chats":509, "chatShifts":12,"avgChats":42.4,"shifts":15,"total":643, "avg":42.9},
+    {"name":"Наталя Чикулаєва","abbr":"НЧ","tickets":256, "emails":404, "chats":836, "chatShifts":16,"avgChats":52.3,"shifts":19,"total":1240,"avg":65.3},
+    {"name":"Наталя Телятинська","abbr":"НТ","tickets":152,"emails":226, "chats":1024,"chatShifts":17,"avgChats":60.2,"shifts":19,"total":1250,"avg":65.8},
+    {"name":"Христя Малко",    "abbr":"ХМ","tickets":156, "emails":218, "chats":689, "chatShifts":18,"avgChats":38.3,"shifts":20,"total":907, "avg":45.4},
+    {"name":"Софа Гронська",   "abbr":"СГ","tickets":1019,"emails":1744,"chats":108, "chatShifts":2, "avgChats":54.0,"shifts":20,"total":1852,"avg":92.6}
+  ],
+  "feb": [
+    {"name":"Андріяна Носаль",  "abbr":"АН","tickets":0,"emails":690,"chats":107,"chatShifts":null,"avgChats":null,"shifts":null,"total":797,"avg":null,"isNew":false},
+    {"name":"Софа Гронська",   "abbr":"СГ","tickets":0,"emails":568,"chats":397,"chatShifts":9,   "avgChats":44.1,"shifts":14,  "total":965,"avg":68.9,"isNew":false},
+    {"name":"Сабіна Сафіулова","abbr":"СС","tickets":0,"emails":224,"chats":308,"chatShifts":4,   "avgChats":77.0,"shifts":7,   "total":532,"avg":76.0,"isNew":false},
+    {"name":"Катя Козицька",   "abbr":"КК","tickets":0,"emails":151,"chats":534,"chatShifts":10,  "avgChats":53.4,"shifts":14,  "total":685,"avg":48.9,"isNew":false},
+    {"name":"Христя Лещишин", "abbr":"ХЛ","tickets":0,"emails":120,"chats":454,"chatShifts":9,   "avgChats":50.4,"shifts":13,  "total":574,"avg":44.2,"isNew":false},
+    {"name":"Наталя Чикулаєва","abbr":"НЧ","tickets":0,"emails":166,"chats":517,"chatShifts":10, "avgChats":51.7,"shifts":14,  "total":683,"avg":48.8,"isNew":false},
+    {"name":"Христя Малко",   "abbr":"ХМ","tickets":0,"emails":120,"chats":452,"chatShifts":10,  "avgChats":45.2,"shifts":13,  "total":572,"avg":44.0,"isNew":false},
+    {"name":"Наталя Грицан",  "abbr":"НГ","tickets":0,"emails":236,"chats":536,"chatShifts":12,  "avgChats":44.7,"shifts":14,  "total":772,"avg":55.1,"isNew":false},
+    {"name":"Марічка Підвадцятник","abbr":"МП","tickets":0,"emails":216,"chats":440,"chatShifts":9,"avgChats":48.9,"shifts":14,"total":656,"avg":46.9,"isNew":false},
+    {"name":"Наталя Телятинська","abbr":"НТ","tickets":0,"emails":188,"chats":613,"chatShifts":12,"avgChats":51.1,"shifts":15, "total":801,"avg":53.4,"isNew":false},
+    {"name":"Нікіта Крапівной","abbr":"НК","tickets":0,"emails":136,"chats":550,"chatShifts":11, "avgChats":50.0,"shifts":11,  "total":686,"avg":62.4,"isNew":false},
+    {"name":"Вова Вульчин",   "abbr":"ВВ","tickets":0,"emails":202,"chats":359,"chatShifts":10,  "avgChats":35.9,"shifts":14,  "total":561,"avg":40.1,"isNew":true},
+    {"name":"Настя Волосянко", "abbr":"НВ","tickets":0,"emails":116,"chats":178,"chatShifts":8,   "avgChats":22.3,"shifts":11,  "total":294,"avg":26.7,"isNew":true},
+    {"name":"Маша Івасюк",    "abbr":"МІ","tickets":0,"emails":72, "chats":200,"chatShifts":6,   "avgChats":33.3,"shifts":10,  "total":272,"avg":27.2,"isNew":true}
+  ]
+}

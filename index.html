@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agent Dashboard — Live · Jan vs Feb 2026</title>
+<!-- GitHub Integration: data.json is the source of truth -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root {
@@ -24,10 +25,31 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .b-jan{background:#1e3a5f;color:#60a5fa;border:1px solid var(--jan)}
 .b-feb{background:#431407;color:#fb923c;border:1px solid var(--feb)}
 
-/* REFRESH BUTTON */
+/* BUTTONS */
 .btn-refresh{display:flex;align-items:center;gap:7px;background:linear-gradient(135deg,#1d4ed8,#1e40af);border:1px solid #3b82f6;color:#fff;padding:8px 18px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap}
 .btn-refresh:hover{background:linear-gradient(135deg,#2563eb,#1d4ed8);box-shadow:0 0 16px #3b82f644}
 .btn-refresh:disabled{opacity:.5;cursor:not-allowed}
+.btn-token{display:flex;align-items:center;gap:5px;background:var(--card2);border:1px solid var(--border);color:var(--muted);padding:8px 12px;border-radius:8px;font-size:11px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-token:hover{border-color:var(--yellow);color:var(--yellow)}
+.btn-token.active{border-color:var(--green);color:var(--green)}
+
+/* TOKEN MODAL */
+.tok-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center}
+.tok-overlay.open{display:flex}
+.tok-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;width:420px;max-width:95vw}
+.tok-title{font-size:16px;font-weight:700;margin-bottom:6px}
+.tok-desc{font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.6}
+.tok-input{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:monospace;outline:none;transition:border .2s}
+.tok-input:focus{border-color:var(--jan)}
+.tok-input::placeholder{color:var(--muted2)}
+.tok-btns{display:flex;gap:8px;margin-top:16px}
+.tok-save{flex:1;background:var(--jan);border:none;color:#fff;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.tok-save:hover{background:#2563eb}
+.tok-clear{background:var(--red-s);border:1px solid var(--red);color:var(--red);padding:10px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+.tok-cancel{background:var(--card2);border:1px solid var(--border);color:var(--muted);padding:10px 14px;border-radius:8px;font-size:13px;cursor:pointer}
+.tok-status{margin-top:10px;font-size:11px;padding:7px 10px;border-radius:6px;display:none}
+.tok-status.ok{background:var(--green-s);color:var(--green);display:block}
+.tok-status.err{background:var(--red-s);color:var(--red);display:block}
 .spin{display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .update-ts{font-size:10px;color:var(--muted2);text-align:right;margin-top:2px}
@@ -140,11 +162,16 @@ tr:last-child td{border-bottom:none}
   <div class="hdr-right">
     <div class="badge b-jan">JAN 2026 · Повний місяць</div>
     <div class="badge b-feb">FEB 2026 · ~75% місяця</div>
-    <div>
-      <button class="btn-refresh" id="btnRefresh" onclick="refreshData()">
-        <span id="refreshIcon">🔄</span> Оновити дані з Google Sheets
-      </button>
-      <div class="update-ts" id="updateTs">Останнє оновлення: початкові дані</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+      <div style="display:flex;gap:8px">
+        <button class="btn-token" id="btnToken" onclick="openTokenModal()" title="Налаштування GitHub токена">
+          <span id="tokenIcon">🔑</span> <span id="tokenLabel">Токен</span>
+        </button>
+        <button class="btn-refresh" id="btnRefresh" onclick="refreshData()">
+          <span id="refreshIcon">🔄</span> Оновити і запушити на GitHub
+        </button>
+      </div>
+      <div class="update-ts" id="updateTs">Завантаження даних...</div>
     </div>
   </div>
 </div>
@@ -257,6 +284,25 @@ tr:last-child td{border-bottom:none}
 
 <div class="footer" id="footer">Dashboard · GPT Support Team · Jan vs Feb 2026</div>
 
+<!-- TOKEN MODAL -->
+<div class="tok-overlay" id="tokenModal">
+  <div class="tok-modal">
+    <div class="tok-title">🔑 GitHub Personal Access Token</div>
+    <div class="tok-desc">
+      Токен потрібен для публікації оновлених даних на GitHub.<br>
+      Зберігається тільки у твоєму браузері (localStorage).<br><br>
+      <b>Де взяти:</b> github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens → New token → дай доступ <code>Contents: Read & Write</code> до репо <code>agent-dashboard</code>
+    </div>
+    <input class="tok-input" id="tokenInput" type="password" placeholder="ghp_або github_pat_...">
+    <div class="tok-btns">
+      <button class="tok-save" onclick="saveToken()">✓ Зберегти</button>
+      <button class="tok-clear" onclick="clearToken()">✕ Видалити</button>
+      <button class="tok-cancel" onclick="closeTokenModal()">Закрити</button>
+    </div>
+    <div class="tok-status" id="tokStatus"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════
 //  CONFIG
@@ -265,6 +311,10 @@ const SHEET_ID = '157LfSlWBvqy2ZPe4L3VcTkXNAKMt9N7ktHigS0NPoAg';
 const GID_JAN  = '268313886';
 const GID_FEB  = '1857805644';
 const PROXY    = 'https://api.allorigins.win/get?url=';
+const GH_OWNER = 'nastiazabusik2002-oss';
+const GH_REPO  = 'agent-dashboard';
+const DATA_FILE = 'data.json';
+const RAW_URL  = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/main/${DATA_FILE}`;
 
 const ABBR = {
   'Андріяна Носаль':'АН','Наталя Грицан':'НГ','Марічка Подвадцятник':'МП',
@@ -377,7 +427,103 @@ function extractAgents(csvText) {
 }
 
 // ═══════════════════════════════════════════
-//  FETCH DATA
+//  TOKEN MANAGEMENT
+// ═══════════════════════════════════════════
+const TOKEN_KEY = 'gh_dashboard_token';
+
+function getToken()      { return localStorage.getItem(TOKEN_KEY); }
+function openTokenModal() {
+  const t = getToken();
+  document.getElementById('tokenInput').value = t ? '••••••••••••••••' : '';
+  document.getElementById('tokStatus').className = 'tok-status';
+  document.getElementById('tokenModal').classList.add('open');
+}
+function closeTokenModal() { document.getElementById('tokenModal').classList.remove('open'); }
+
+function saveToken() {
+  const val = document.getElementById('tokenInput').value.trim();
+  if (!val || val.startsWith('•')) { showTokStatus('Введи токен', 'err'); return; }
+  localStorage.setItem(TOKEN_KEY, val);
+  updateTokenBtn(true);
+  showTokStatus('✓ Токен збережено в браузері', 'ok');
+  setTimeout(closeTokenModal, 1200);
+}
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  document.getElementById('tokenInput').value = '';
+  updateTokenBtn(false);
+  showTokStatus('Токен видалено', 'ok');
+}
+function showTokStatus(msg, type) {
+  const el = document.getElementById('tokStatus');
+  el.textContent = msg; el.className = `tok-status ${type}`;
+}
+function updateTokenBtn(hasToken) {
+  const btn = document.getElementById('btnToken');
+  const lbl = document.getElementById('tokenLabel');
+  if (hasToken) { btn.classList.add('active'); lbl.textContent = 'Токен ✓'; }
+  else          { btn.classList.remove('active'); lbl.textContent = 'Токен'; }
+}
+
+// ═══════════════════════════════════════════
+//  GITHUB API
+// ═══════════════════════════════════════════
+function toBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
+async function pushDataToGitHub(janData, febData) {
+  const token = getToken();
+  if (!token) throw new Error('GitHub токен не налаштований. Натисни кнопку 🔑 Токен.');
+
+  const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${DATA_FILE}`;
+  const headers = {
+    'Authorization': `token ${token}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+
+  // Get current file SHA (needed to update existing file)
+  let sha = null;
+  const shaResp = await fetch(apiUrl, { headers });
+  if (shaResp.ok) {
+    const shaData = await shaResp.json();
+    sha = shaData.sha;
+  }
+
+  const payload = { lastUpdated: new Date().toISOString(), jan: janData, feb: febData };
+  const body = {
+    message: `📊 Update data · ${new Date().toLocaleString('uk-UA')}`,
+    content: toBase64(JSON.stringify(payload, null, 2))
+  };
+  if (sha) body.sha = sha;
+
+  const resp = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.message || `GitHub API помилка ${resp.status}`);
+  }
+  return resp.json();
+}
+
+// ═══════════════════════════════════════════
+//  LOAD DATA FROM GITHUB
+// ═══════════════════════════════════════════
+async function loadDataFromGitHub() {
+  try {
+    const resp = await fetch(`${RAW_URL}?_=${Date.now()}`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data.jan?.length >= 5 && data.feb?.length >= 5) return data;
+  } catch(e) {}
+  return null;
+}
+
+// ═══════════════════════════════════════════
+//  FETCH CSV FROM GOOGLE SHEETS
 // ═══════════════════════════════════════════
 async function fetchCSV(gid) {
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
@@ -388,44 +534,53 @@ async function fetchCSV(gid) {
   return json.contents;
 }
 
+// ═══════════════════════════════════════════
+//  REFRESH — MAIN FLOW
+// ═══════════════════════════════════════════
 async function refreshData() {
-  const btn = document.getElementById('btnRefresh');
+  // Check token before starting
+  if (!getToken()) {
+    openTokenModal();
+    return;
+  }
+
+  const btn  = document.getElementById('btnRefresh');
   const icon = document.getElementById('refreshIcon');
   btn.disabled = true;
   icon.className = 'spin'; icon.textContent = '⟳';
-  setStatus('loading', '⟳ Завантаження даних з Google Sheets...');
+  setStatus('loading', '⟳ Крок 1/3 — Завантаження з Google Sheets...');
 
   try {
-    const [janCSV, febCSV] = await Promise.all([
-      fetchCSV(GID_JAN),
-      fetchCSV(GID_FEB)
-    ]);
+    // STEP 1: Fetch Google Sheets
+    const [janCSV, febCSV] = await Promise.all([fetchCSV(GID_JAN), fetchCSV(GID_FEB)]);
+
+    setStatus('loading', '⟳ Крок 2/3 — Парсинг даних...');
 
     const newJan = extractAgents(janCSV);
     const newFeb = extractAgents(febCSV);
-
-    if (newJan.length >= 5) {
-      JAN = newJan;
-    }
+    if (newJan.length >= 5) JAN = newJan;
     if (newFeb.length >= 5) {
-      const janNameSet = new Set(JAN.map(a => a.name.toLowerCase().replace(/\s/g,'').slice(0,8)));
-      FEB = newFeb.map(a => ({
-        ...a,
-        isNew: !janNameSet.has(a.name.toLowerCase().replace(/\s/g,'').slice(0,8))
-      }));
+      const janSet = new Set(JAN.map(a => a.name.toLowerCase().replace(/\s/g,'').slice(0,8)));
+      FEB = newFeb.map(a => ({ ...a, isNew: !janSet.has(a.name.toLowerCase().replace(/\s/g,'').slice(0,8)) }));
     }
-
     buildComp();
-    renderAll();
 
+    // STEP 2: Push to GitHub
+    setStatus('loading', '⟳ Крок 3/3 — Публікація на GitHub...');
+    await pushDataToGitHub(JAN, FEB);
+
+    // STEP 3: Render
+    renderAll();
     const now = new Date();
     document.getElementById('updateTs').textContent =
-      `Оновлено: ${now.toLocaleDateString('uk-UA')} о ${now.toLocaleTimeString('uk-UA')}`;
-    setStatus('success', `✓ Дані оновлено! Jan: ${JAN.length} агентів · Feb: ${FEB.length} агентів`);
-    setTimeout(() => hideStatus(), 4000);
+      `✓ Оновлено та опубліковано: ${now.toLocaleString('uk-UA')}`;
+    setStatus('success', `✓ Готово! Дані оновлено і запушено на GitHub · Jan: ${JAN.length} · Feb: ${FEB.length} агентів`);
+    setTimeout(hideStatus, 5000);
 
-  } catch (e) {
-    setStatus('error', `✗ Помилка: ${e.message}. Показані останні завантажені дані.`);
+  } catch(e) {
+    setStatus('error', `✗ ${e.message}`);
+    // Still try to render with whatever data we have
+    buildComp(); renderAll();
   } finally {
     btn.disabled = false;
     icon.className = ''; icon.textContent = '🔄';
@@ -436,7 +591,6 @@ function setStatus(type, msg) {
   const bar = document.getElementById('statusBar');
   bar.className = `status-bar show ${type}`;
   document.getElementById('statusMsg').textContent = msg;
-  bar.style.display = 'flex';
 }
 function hideStatus() {
   document.getElementById('statusBar').className = 'status-bar';
@@ -774,8 +928,26 @@ function renderAll() {
 // ═══════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════
-buildComp();
-renderAll();
+(async () => {
+  // Check stored token
+  updateTokenBtn(!!getToken());
+
+  // Try to load latest data from GitHub
+  document.getElementById('updateTs').textContent = '⟳ Завантаження даних...';
+  const ghData = await loadDataFromGitHub();
+  if (ghData) {
+    JAN = ghData.jan;
+    FEB = ghData.feb;
+    const d = new Date(ghData.lastUpdated);
+    document.getElementById('updateTs').textContent =
+      `Дані з GitHub: ${d.toLocaleString('uk-UA')}`;
+  } else {
+    document.getElementById('updateTs').textContent = 'Початкові дані (GitHub недоступний)';
+  }
+
+  buildComp();
+  renderAll();
+})();
 </script>
 </body>
 </html>
