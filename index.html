@@ -55,6 +55,20 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .btn-tg{display:flex;align-items:center;gap:5px;background:#0f2a1a;border:1px solid #22c55e44;color:var(--muted);padding:8px 12px;border-radius:8px;font-size:11px;cursor:pointer;transition:all .2s;white-space:nowrap}
 .btn-tg:hover{border-color:var(--green);color:var(--green)}
 .btn-tg.active{border-color:var(--green);color:var(--green);background:#14432a}
+.btn-team{display:flex;align-items:center;gap:5px;background:#1a1040;border:1px solid #a855f744;color:var(--muted);padding:8px 12px;border-radius:8px;font-size:11px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-team:hover{border-color:var(--purple);color:var(--purple)}
+.btn-team.active{border-color:var(--purple);color:var(--purple);background:#2e1065}
+
+/* TEAM MODAL */
+.team-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;width:520px;max-width:96vw;max-height:88vh;overflow-y:auto}
+.team-agent-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.team-agent-row:last-child{border:none}
+.team-agent-name{flex:1;font-size:13px;font-weight:600}
+.team-agent-input{width:140px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;font-family:monospace;outline:none}
+.team-agent-input:focus{border-color:var(--purple)}
+.team-agent-input.filled{border-color:var(--green);background:#14432a22}
+.team-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-ok{background:var(--green)} .dot-empty{background:var(--border)}
 .spin{display:inline-block;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .update-ts{font-size:10px;color:var(--muted2);text-align:right;margin-top:2px}
@@ -171,6 +185,9 @@ tr:last-child td{border-bottom:none}
       <div style="display:flex;gap:8px">
         <button class="btn-tg" id="btnTg" onclick="openTgModal()" title="Telegram сповіщення">
           <span>🤖</span> <span id="tgLabel">Telegram</span>
+        </button>
+        <button class="btn-team" id="btnTeam" onclick="openTeamModal()" title="Персональні сповіщення команди">
+          <span>👥</span> <span id="teamLabel">Команда</span>
         </button>
         <button class="btn-token" id="btnToken" onclick="openTokenModal()" title="Налаштування GitHub токена">
           <span id="tokenIcon">🔑</span> <span id="tokenLabel">Токен</span>
@@ -330,6 +347,25 @@ tr:last-child td{border-bottom:none}
       <button class="tok-cancel" onclick="closeTokenModal()">Закрити</button>
     </div>
     <div class="tok-status" id="tokStatus"></div>
+  </div>
+</div>
+
+<!-- TEAM MODAL -->
+<div class="tok-overlay" id="teamModal">
+  <div class="team-modal">
+    <div class="tok-title">👥 Персональні сповіщення команди</div>
+    <div class="tok-desc">
+      Введи Telegram Chat ID для кожного агента.<br>
+      Кожен отримуватиме сповіщення <b>лише про свою власну статистику</b>.<br><br>
+      Як дізнатись свій Chat ID: написати боту <b>@userinfobot</b> у Telegram.
+    </div>
+    <div id="teamAgentsList"></div>
+    <div class="tok-btns" style="margin-top:16px">
+      <button class="tok-save" onclick="saveTeamRegistrations()">✓ Зберегти</button>
+      <button class="tok-save" style="background:#0d7a3e" onclick="testPersonalAlerts()">📨 Тест</button>
+      <button class="tok-cancel" onclick="closeTeamModal()">Закрити</button>
+    </div>
+    <div class="tok-status" id="teamStatus"></div>
   </div>
 </div>
 
@@ -581,6 +617,204 @@ async function sendTelegramNotification(comp) {
 }
 
 // ═══════════════════════════════════════════
+//  TEAM REGISTRATIONS (per-agent personalized alerts)
+// ═══════════════════════════════════════════
+const REGS_FILE = 'registrations.json';
+const REGS_KEY  = 'team_registrations';
+const REGS_URL  = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/main/${REGS_FILE}`;
+
+function getRegistrations() {
+  try { return JSON.parse(localStorage.getItem(REGS_KEY) || '{}'); } catch { return {}; }
+}
+function saveRegistrationsLocal(regs) {
+  localStorage.setItem(REGS_KEY, JSON.stringify(regs));
+}
+
+async function loadRegistrationsFromGitHub() {
+  try {
+    const resp = await fetch(`${REGS_URL}?_=${Date.now()}`);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch { return null; }
+}
+
+async function pushRegistrationsToGitHub(regs) {
+  const token = getToken();
+  if (!token) throw new Error('GitHub токен не налаштований. Натисни 🔑 Токен.');
+
+  const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${REGS_FILE}`;
+  const headers = {
+    'Authorization': `token ${token}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+  let sha = null;
+  const shaResp = await fetch(apiUrl, { headers });
+  if (shaResp.ok) { const sd = await shaResp.json(); sha = sd.sha; }
+
+  const body = { message: `\uD83D\uDC65 Update registrations`, content: toBase64(JSON.stringify(regs, null, 2)) };
+  if (sha) body.sha = sha;
+
+  const resp = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.message || `GitHub API ${resp.status}`);
+  }
+  return resp.json();
+}
+
+function getAllAgentNames() {
+  const names = new Set();
+  JAN.forEach(a => names.add(a.name));
+  FEB.forEach(a => names.add(a.name));
+  return [...names].sort((a,b) => a.localeCompare(b, 'uk'));
+}
+
+function onTeamInputChange(input) {
+  const row = input.closest('.team-agent-row');
+  const dot = row.querySelector('.team-status-dot');
+  const filled = !!input.value.trim();
+  input.classList.toggle('filled', filled);
+  dot.className = 'team-status-dot ' + (filled ? 'dot-ok' : 'dot-empty');
+}
+
+function openTeamModal() {
+  const regs  = getRegistrations();
+  const names = getAllAgentNames();
+  const listEl = document.getElementById('teamAgentsList');
+  listEl.innerHTML = names.map(name => {
+    const abbr   = ABBR[name] || name.split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
+    const chatId = regs[name] || '';
+    const filled = !!chatId;
+    const safe   = name.replace(/"/g, '&quot;');
+    return `<div class="team-agent-row">
+      <div class="team-status-dot ${filled ? 'dot-ok' : 'dot-empty'}"></div>
+      <div class="team-agent-name"><span style="color:var(--muted2);margin-right:6px;font-size:11px">${abbr}</span>${name}</div>
+      <input class="team-agent-input ${filled ? 'filled' : ''}" type="text" placeholder="Chat ID"
+             value="${chatId}" data-agent="${safe}" oninput="onTeamInputChange(this)">
+    </div>`;
+  }).join('');
+  document.getElementById('teamStatus').className = 'tok-status';
+  document.getElementById('teamModal').classList.add('open');
+  updateTeamBtn(Object.values(regs).some(v => v));
+}
+
+function closeTeamModal() {
+  document.getElementById('teamModal').classList.remove('open');
+}
+
+async function saveTeamRegistrations() {
+  const inputs = document.querySelectorAll('.team-agent-input');
+  const regs = {};
+  inputs.forEach(inp => {
+    const name = inp.dataset.agent;
+    const val  = inp.value.trim();
+    if (name && val) regs[name] = val;
+  });
+  saveRegistrationsLocal(regs);
+  updateTeamBtn(Object.keys(regs).length > 0);
+
+  const statusEl = document.getElementById('teamStatus');
+  statusEl.textContent = '\u23F3 Зберігаю на GitHub...';
+  statusEl.className = 'tok-status ok';
+  try {
+    await pushRegistrationsToGitHub(regs);
+    const count = Object.keys(regs).length;
+    statusEl.textContent = `\u2713 Збережено ${count} агентів · Опубліковано на GitHub`;
+    setTimeout(closeTeamModal, 1800);
+  } catch(e) {
+    statusEl.textContent = `\u26A0 Збережено локально · GitHub: ${e.message}`;
+  }
+}
+
+async function testPersonalAlerts() {
+  const token = getTgToken();
+  if (!token) {
+    const st = document.getElementById('teamStatus');
+    st.textContent = 'Спочатку налаштуй Telegram бот (кнопка \uD83E\uDD16 Telegram)';
+    st.className = 'tok-status err'; return;
+  }
+  const regs = getRegistrations();
+  const entries = Object.entries(regs).filter(([,v]) => v);
+  if (!entries.length) {
+    const st = document.getElementById('teamStatus');
+    st.textContent = 'Немає зареєстрованих агентів'; st.className = 'tok-status err'; return;
+  }
+  const statusEl = document.getElementById('teamStatus');
+  statusEl.textContent = `\u23F3 Надсилаю тест ${entries.length} агентам...`;
+  statusEl.className = 'tok-status ok';
+  let ok = 0, fail = 0;
+  for (const [name, chatId] of entries) {
+    try {
+      await tgSend(token, chatId,
+        `\u2705 <b>Тест персональних сповіщень!</b>\n\nЦей бот надсилатиме тобі сповіщення лише про твою власну статистику.\n\n<i>Agent Dashboard \u00B7 GPT Support Team</i>`);
+      ok++;
+    } catch { fail++; }
+  }
+  statusEl.textContent = `\u2713 Надіслано: ${ok} \u00B7 Помилок: ${fail}`;
+}
+
+function updateTeamBtn(active) {
+  const btn = document.getElementById('btnTeam');
+  const lbl = document.getElementById('teamLabel');
+  if (!btn) return;
+  if (active) { btn.classList.add('active'); lbl.textContent = 'Команда \u2713'; }
+  else        { btn.classList.remove('active'); lbl.textContent = 'Команда'; }
+}
+
+async function sendPersonalizedAlerts() {
+  const token = getTgToken();
+  if (!token) return;
+
+  // Try GitHub first for freshest registrations, fall back to localStorage
+  let regs = await loadRegistrationsFromGitHub();
+  if (!regs || !Object.keys(regs).length) regs = getRegistrations();
+  if (!regs || !Object.keys(regs).length) return;
+
+  const now = new Date().toLocaleString('uk-UA');
+  for (const comp of COMP) {
+    const chatId = regs[comp.jan.name];
+    if (!chatId) continue;
+
+    const jan = comp.jan;
+    const feb = comp.feb;
+    const janAvg    = jan.avg    != null ? jan.avg.toFixed(1)    : '\u2014';
+    const febAvg    = feb?.avg   != null ? feb.avg.toFixed(1)    : '\u2014';
+    const janChats  = jan.avgChats != null ? jan.avgChats.toFixed(1) : '\u2014';
+    const febChats  = feb?.avgChats != null ? feb.avgChats.toFixed(1) : '\u2014';
+    const janShifts = jan.shifts ?? '\u2014';
+    const febShifts = feb?.shifts ?? '\u2014';
+
+    let statusLine = '';
+    if (comp.dPct !== null) {
+      if (comp.dPct >= 0)
+        statusLine = `\n\u2705 <b>Ти на правильному шляху!</b> Ефективність зросла на <b>+${comp.dPct.toFixed(1)}%</b>`;
+      else if (comp.dPct >= DECLINE_THRESHOLD)
+        statusLine = `\n\u27A1\uFE0F Незначне зниження (${comp.dPct.toFixed(1)}%) \u2014 в межах норми`;
+      else if (comp.dPct >= -20)
+        statusLine = `\n\u26A0\uFE0F Зниження ефективності на <b>${comp.dPct.toFixed(1)}%</b>. Зверни увагу!`;
+      else
+        statusLine = `\n\uD83D\uDD34 Значне зниження на <b>${comp.dPct.toFixed(1)}%</b>. Потрібна увага!`;
+    }
+
+    const dAvgStr   = comp.dAvg  != null ? ` (${comp.dAvg > 0 ? '+' : ''}${comp.dAvg.toFixed(1)})` : '';
+    const dChatsStr = comp.dChats != null ? ` (${comp.dChats > 0 ? '+' : ''}${comp.dChats.toFixed(1)})` : '';
+
+    const msg = `\uD83D\uDCCA <b>Твоя статистика \u00B7 GPT Support Team</b>\n<i>${now}</i>\n\n` +
+      `<b>Avg / зміна:</b>  Jan: <b>${janAvg}</b>  \u2192  Feb: <b>${febAvg}</b>${dAvgStr}\n` +
+      `<b>Чат / зміна:</b>  Jan: ${janChats}  \u2192  Feb: ${febChats}${dChatsStr}\n` +
+      `<b>Відпрацьовано:</b>  Jan: ${janShifts} зм  \u2192  Feb: ${febShifts} зм` +
+      statusLine;
+
+    try {
+      await tgSend(token, chatId, msg);
+    } catch(e) {
+      console.warn(`Personal alert failed for ${jan.name}:`, e.message);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
 //  TOKEN MANAGEMENT
 // ═══════════════════════════════════════════
 const TOKEN_KEY = 'gh_dashboard_token';
@@ -729,10 +963,11 @@ async function refreshData() {
     document.getElementById('updateTs').textContent =
       `✓ Оновлено та опубліковано: ${now.toLocaleString('uk-UA')}`;
 
-    // STEP 4: Telegram notification
+    // STEP 4: Telegram notifications (admin summary + personalized per-agent)
+    const hasTg = getTgToken() && getTgChat();
     try {
-      await sendTelegramNotification(COMP);
-      const hasTg = getTgToken() && getTgChat();
+      await sendTelegramNotification(COMP);   // admin team-wide summary
+      await sendPersonalizedAlerts();          // individual per-agent messages
       setStatus('success', `✓ Готово! Дані оновлено і запушено на GitHub${hasTg ? ' · Сповіщення надіслано в Telegram 🤖' : ''}`);
     } catch(tgErr) {
       setStatus('success', `✓ Дані оновлено · Telegram помилка: ${tgErr.message}`);
@@ -1094,6 +1329,7 @@ function renderAll() {
   // Check stored tokens
   updateTokenBtn(!!getToken());
   updateTgBtn(!!(getTgToken() && getTgChat()));
+  updateTeamBtn(Object.values(getRegistrations()).some(v => v));
 
   // Try to load latest data from GitHub
   document.getElementById('updateTs').textContent = '⟳ Завантаження даних...';
@@ -1110,6 +1346,14 @@ function renderAll() {
 
   buildComp();
   renderAll();
+
+  // Load team registrations from GitHub (background, no blocking)
+  loadRegistrationsFromGitHub().then(ghRegs => {
+    if (ghRegs && Object.keys(ghRegs).length > 0) {
+      saveRegistrationsLocal(ghRegs);
+      updateTeamBtn(true);
+    }
+  }).catch(() => {});
 })();
 </script>
 </body>
